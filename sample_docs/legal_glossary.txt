@@ -1,0 +1,148 @@
+LEGAL TERMS GLOSSARY — TECHNOLOGY CONTRACTS
+
+This glossary defines key terms commonly encountered in technology services
+agreements, software licences, and related commercial contracts. It is
+intended as a reference guide for legal and commercial teams.
+
+
+INDEMNIFICATION
+
+Indemnification is a contractual obligation by which one party (the indemnitor)
+agrees to compensate the other party (the indemnitee) for specified losses,
+damages, or liabilities. In technology contracts, indemnification clauses
+typically cover: (a) intellectual property infringement claims; (b) breach
+of contract; (c) gross negligence or wilful misconduct; and (d) data breaches.
+
+Liability caps on indemnification are standard in commercial contracts and
+usually expressed as a multiple of fees paid (e.g., 12 months, 24 months)
+or a fixed monetary amount. Mutual indemnification provisions require both
+parties to indemnify each other for their respective breaches.
+
+Key distinction: Indemnification covers third-party claims brought against
+the indemnitee, while direct damages provisions govern claims between
+the contracting parties themselves.
+
+
+CONSEQUENTIAL DAMAGES
+
+Consequential damages (also called special or indirect damages) are losses
+that do not flow directly from a breach but arise from special circumstances
+known to the breaching party at the time of contracting. Examples include
+lost profits, loss of business opportunity, reputational harm, and business
+interruption costs.
+
+Most commercial technology contracts exclude consequential damages through
+a "consequential damages exclusion" or "limitation of liability" clause.
+These exclusions are enforced in most jurisdictions but may be subject to
+carve-outs for: data breaches, fraud, wilful misconduct, and indemnification
+obligations.
+
+The enforceability of consequential damages exclusions varies by jurisdiction.
+Under English law, such clauses are generally enforceable unless unreasonable
+under the Unfair Contract Terms Act 1977.
+
+
+FORCE MAJEURE
+
+Force majeure (French: "superior force") is a clause that excuses a party
+from performance obligations when extraordinary events or circumstances
+beyond its reasonable control prevent performance. Common force majeure
+events include: natural disasters, acts of war or terrorism, pandemics,
+government actions, and critical infrastructure failures.
+
+Three requirements must typically be met: (1) the event must be unforeseeable
+or unavoidable; (2) it must be beyond the party's reasonable control; and
+(3) it must actually prevent performance rather than merely making it more
+difficult or expensive.
+
+Force majeure clauses do not typically excuse payment obligations already
+due. Parties relying on force majeure must usually provide prompt notice
+and make reasonable efforts to mitigate the impact.
+
+
+INTELLECTUAL PROPERTY — WORK FOR HIRE
+
+In technology contracts, intellectual property ownership of custom-developed
+software and deliverables is governed by the work-for-hire doctrine or express
+assignment provisions. Under US law, work created by an employee within the
+scope of employment is automatically a "work made for hire" owned by the
+employer. Work created by independent contractors requires an express written
+assignment to transfer ownership.
+
+"Background IP" or "Pre-existing IP" refers to intellectual property owned
+by a party prior to the contract. Vendors routinely retain background IP,
+licensing it to clients under limited-use licences. "Foreground IP" refers to
+IP created specifically for the client during the engagement.
+
+
+ARBITRATION CLAUSE
+
+An arbitration clause is a provision requiring parties to resolve disputes
+through private arbitration rather than litigation in court. Arbitration
+is generally faster and more confidential than litigation. Key elements of
+an arbitration clause include: (a) the administering body (e.g., ICC, AAA,
+LCIA); (b) the number of arbitrators; (c) the seat of arbitration; (d) the
+governing language; and (e) the governing law.
+
+In international contracts, arbitration is often preferred because arbitral
+awards are more easily enforced across borders under the 1958 New York
+Convention, to which over 170 countries are signatories.
+
+
+SLA — SERVICE LEVEL AGREEMENT
+
+A Service Level Agreement defines the specific performance standards a
+vendor must maintain, the measurement methodology, and the remedies
+available to the client if standards are not met. Common SLA metrics include:
+system uptime (e.g., 99.9%), response time, resolution time, and data
+recovery time objectives (RTO) and recovery point objectives (RPO).
+
+SLA credits are the typical remedy for SLA failures — the vendor credits
+the client's account a percentage of monthly fees. SLA credits are generally
+the client's sole remedy for SLA breaches and do not constitute a right to
+terminate unless persistent failures trigger a separate termination right.
+
+
+LIMITATION OF LIABILITY
+
+A limitation of liability clause caps the maximum amount either party can
+recover from the other in connection with the contract. Caps are typically
+expressed as: (a) a fixed amount (e.g., USD $1,000,000); (b) a multiple of
+annual or monthly fees; or (c) the amount paid under the contract in a
+specific period preceding the claim.
+
+Common carve-outs (amounts NOT subject to the cap) include: fraud,
+wilful misconduct, data breach, death or personal injury, and
+intellectual property indemnification obligations.
+
+Courts in most common law jurisdictions will enforce limitation of liability
+clauses between commercial parties of equal bargaining power, provided the
+clause was clearly communicated and does not exclude liability for fraud.
+
+
+TERMINATION FOR CONVENIENCE
+
+A termination for convenience clause allows one or both parties to end the
+contract without cause, subject to advance notice (typically 30 to 90 days).
+Upon such termination, the client is generally obligated to pay for all
+services rendered and approved expenses incurred up to the termination date.
+
+Termination for convenience clauses are distinguished from termination for
+cause clauses, which require a material breach and usually provide a cure
+period (typically 30 days). The availability of termination for convenience
+significantly affects the risk profile of a long-term services engagement.
+
+
+DATA PROCESSING AGREEMENT (DPA)
+
+A Data Processing Agreement is a contract between a data controller and
+a data processor that governs the processing of personal data. DPAs are
+required under GDPR (Article 28) and similar data protection laws whenever
+a vendor processes personal data on behalf of a client. Key provisions
+include: the subject matter and duration of processing; the nature and
+purpose of processing; the type of personal data; the obligations of the
+processor; and sub-processing restrictions.
+
+Standard Contractual Clauses (SCCs) are pre-approved DPA templates issued
+by the European Commission for data transfers outside the European Economic
+Area.
