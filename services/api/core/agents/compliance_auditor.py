@@ -41,6 +41,7 @@ from typing import Optional
 
 import structlog
 from deepeval import evaluate
+from deepeval.models import AnthropicModel
 from deepeval.metrics import (
     FaithfulnessMetric,
     AnswerRelevancyMetric,
@@ -101,11 +102,20 @@ class ComplianceAuditorAgent:
         self._precision_metric: Optional[ContextualPrecisionMetric] = None
 
     # ── Metric initialisation ──────────────────────────────────────
+    def _get_judge_model(self) -> AnthropicModel:
+        # DeepEval uses ANTHROPIC_API_KEY directly — no separate key needed.
+        # Passing model and api_key explicitly makes the dependency clear.
+        return AnthropicModel(
+            model=settings.anthropic_model,
+            api_key=settings.anthropic_api_key,
+            temperature=0,
+        )
+
     def _get_faithfulness_metric(self) -> FaithfulnessMetric:
         if self._faithfulness_metric is None:
             self._faithfulness_metric = FaithfulnessMetric(
                 threshold=settings.min_faithfulness_score,
-                model=settings.anthropic_model,
+                model=self._get_judge_model(),
                 include_reason=True,
             )
         return self._faithfulness_metric
@@ -114,7 +124,7 @@ class ComplianceAuditorAgent:
         if self._relevance_metric is None:
             self._relevance_metric = AnswerRelevancyMetric(
                 threshold=0.7,
-                model=settings.anthropic_model,
+                model=self._get_judge_model(),
                 include_reason=True,
             )
         return self._relevance_metric
@@ -123,7 +133,7 @@ class ComplianceAuditorAgent:
         if self._precision_metric is None:
             self._precision_metric = ContextualPrecisionMetric(
                 threshold=0.7,
-                model=settings.anthropic_model,
+                model=self._get_judge_model(),
                 include_reason=True,
             )
         return self._precision_metric

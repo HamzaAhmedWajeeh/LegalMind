@@ -122,10 +122,8 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Evaluation — DeepEval
     # ------------------------------------------------------------------
-    deepeval_api_key: str = Field(
-        default="",
-        description="DeepEval Confident AI key (optional)",
-    )
+    # DeepEval uses ANTHROPIC_API_KEY to run Claude as the judge.
+    # No separate DeepEval API key is required.
     min_faithfulness_score: float = Field(
         default=0.9,
         ge=0.0,

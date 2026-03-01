@@ -23,7 +23,7 @@ env:
   # API keys injected from GitHub Secrets (set in repo Settings → Secrets)
   ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
   COHERE_API_KEY:     ${{ secrets.COHERE_API_KEY }}
-  DEEPEVAL_API_KEY:   ${{ secrets.DEEPEVAL_API_KEY }}
+  # DeepEval uses ANTHROPIC_API_KEY above — no separate secret needed
   # Postgres config for the service container
   POSTGRES_USER:     legalmind
   POSTGRES_PASSWORD: legalmind_ci
