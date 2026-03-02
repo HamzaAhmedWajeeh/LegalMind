@@ -1,0 +1,122 @@
+AMENDMENT NO. 2 TO MASTER SERVICES AGREEMENT
+
+This Amendment No. 2 ("Amendment") to the Master Services Agreement dated
+June 15, 2023 (the "Agreement") is entered into as of January 1, 2024
+("Amendment Effective Date") by and between:
+
+Apex Corporation ("Client")
+and
+Vendor Technology Ltd. ("Vendor")
+
+(each a "Party" and collectively the "Parties").
+
+
+RECITALS
+
+WHEREAS, the Parties entered into the Agreement on June 15, 2023;
+
+WHEREAS, Amendment No. 1 was executed on September 1, 2023, expanding the
+scope of Services to include cloud infrastructure management;
+
+WHEREAS, the Parties now wish to amend certain provisions of the Agreement
+to reflect the expanded commercial relationship and to update the liability
+framework accordingly;
+
+NOW, THEREFORE, in consideration of the mutual covenants herein, the Parties
+agree as follows:
+
+
+1. AMENDMENT TO SECTION 8.1 — INDEMNIFICATION LIABILITY CAP
+
+Section 8.1 of the Agreement is hereby amended by deleting the final sentence
+in its entirety and replacing it with the following:
+
+"The aggregate liability of Vendor under this Section 8.1 shall not exceed
+the total fees paid by Apex Corp to Vendor in the twenty-four (24) months
+immediately preceding the claim giving rise to liability, effective January 1,
+2024. For claims arising prior to January 1, 2024, the original twelve (12)
+month cap shall continue to apply."
+
+Rationale: The Parties acknowledge that, following the expansion of Services
+under Amendment No. 1, the increased scope and criticality of Vendor's
+obligations to Client warrant an increase in the indemnification liability cap.
+
+
+2. AMENDMENT TO SECTION 3.2 — PAYMENT TERMS
+
+Section 3.2 of the Agreement is hereby amended to read in its entirety as
+follows:
+
+"Vendor shall submit invoices to Client on the first business day of each
+calendar month for Services performed in the preceding month. Payment is due
+within forty-five (45) days of the invoice date ("Payment Due Date"). Client
+may dispute any invoice in good faith by providing written notice to Vendor
+within fifteen (15) days of receipt, specifying in reasonable detail the basis
+for the dispute. Undisputed amounts shall remain due and payable."
+
+The prior thirty (30) day payment term is superseded by this Amendment.
+
+
+3. NEW SECTION 8.5 — CYBER INCIDENT LIABILITY
+
+The following new Section 8.5 is hereby added to the Agreement:
+
+"8.5 Cyber Incident Liability. Notwithstanding Section 8.3, in the event of
+a data breach directly caused by Vendor's failure to maintain the security
+standards set forth in Section 6.3, Vendor's liability for direct damages
+arising from such breach shall not be subject to the exclusion of consequential
+damages set forth in Section 8.3, and shall be subject to a separate aggregate
+cap of five million US dollars (USD $5,000,000) per incident. This Section 8.5
+creates a carve-out to Section 8.3 solely with respect to data breach liability
+and does not otherwise expand Vendor's liability under this Agreement."
+
+
+4. AMENDMENT TO SECTION 9.1 — TERM
+
+Section 9.1 is hereby amended to extend the Initial Term by an additional
+two (2) years. The Agreement shall now expire on June 15, 2028, unless
+earlier terminated in accordance with its terms.
+
+
+5. NEW SECTION 13 — AUDIT RIGHTS
+
+The following new Section 13 is hereby added to the Agreement:
+
+"13.1 Audit Rights. Client shall have the right, upon thirty (30) days'
+prior written notice and no more than once per calendar year, to audit
+Vendor's books, records, and systems relating to the Services to verify
+compliance with this Agreement, including data protection obligations under
+Section 6.
+
+13.2 Audit Costs. The cost of any such audit shall be borne by Client,
+unless the audit reveals a material discrepancy or non-compliance, in which
+case Vendor shall bear the reasonable costs of the audit.
+
+13.3 Cooperation. Vendor shall cooperate fully with any such audit and shall
+provide Client and its auditors with reasonable access to relevant facilities,
+systems, personnel, and documentation."
+
+
+6. RATIFICATION
+
+All other terms and conditions of the Agreement remain unchanged and in full
+force and effect. In the event of any conflict between this Amendment and the
+Agreement, the terms of this Amendment shall control.
+
+
+7. COUNTERPARTS AND EXECUTION
+
+This Amendment may be executed in counterparts and by electronic signature,
+each of which shall be deemed an original and all of which together shall
+constitute one and the same instrument.
+
+
+IN WITNESS WHEREOF, the Parties have executed this Amendment as of the
+Amendment Effective Date.
+
+APEX CORPORATION                        VENDOR TECHNOLOGY LTD.
+
+By: _______________________             By: _______________________
+Name: Sarah Mitchell                    Name: James Hartley
+Title: Chief Legal Officer              Title: Chief Executive Officer
+Date: January 1, 2024                   Date: January 1, 2024

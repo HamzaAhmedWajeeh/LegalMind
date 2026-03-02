@@ -1,0 +1,286 @@
+MASTER SERVICES AGREEMENT
+
+This Master Services Agreement ("Agreement") is entered into as of June 15, 2023
+("Effective Date") by and between:
+
+Apex Corporation, a Delaware corporation with its principal place of business at
+200 Park Avenue, New York, NY 10166 ("Client")
+
+and
+
+Vendor Technology Ltd., a corporation incorporated under the laws of England and
+Wales with its registered office at 1 Canada Square, London E14 5AB ("Vendor").
+
+RECITALS
+
+WHEREAS, Client desires to obtain certain technology services from Vendor, and
+Vendor desires to provide such services to Client, subject to the terms and
+conditions set forth herein.
+
+NOW, THEREFORE, in consideration of the mutual covenants and agreements set forth
+herein, the parties agree as follows:
+
+
+SECTION 1 — DEFINITIONS
+
+1.1 "Confidential Information" means any information disclosed by one party to
+the other, either directly or indirectly, in writing, orally, or by inspection
+of tangible objects, that is designated as confidential or that reasonably
+should be understood to be confidential given the nature of the information and
+circumstances of disclosure.
+
+1.2 "Deliverables" means all work product, software, documentation, reports,
+and other materials specifically created by Vendor for Client pursuant to a
+Statement of Work.
+
+1.3 "Intellectual Property Rights" means all patents, copyrights, trademarks,
+trade secrets, and other intellectual property rights recognised in any
+jurisdiction worldwide.
+
+1.4 "Services" means the technology services described in one or more Statements
+of Work entered into under this Agreement.
+
+1.5 "Statement of Work" or "SOW" means a written document executed by both
+parties that describes specific services to be performed, deliverables to be
+provided, timelines, and fees.
+
+
+SECTION 2 — SERVICES
+
+2.1 Vendor shall perform the Services described in each applicable SOW in a
+professional and workmanlike manner, in accordance with industry standards.
+
+2.2 Vendor shall assign qualified personnel to perform the Services. Vendor may
+substitute personnel provided that replacement personnel have substantially
+similar qualifications.
+
+2.3 Client shall provide Vendor with reasonable access to Client systems, data,
+and personnel as reasonably necessary for Vendor to perform the Services.
+
+2.4 Each party shall designate a project manager who shall serve as the primary
+point of contact for matters relating to the applicable SOW.
+
+
+SECTION 3 — FEES AND PAYMENT
+
+3.1 Client shall pay Vendor the fees set forth in the applicable SOW.
+
+3.2 Vendor shall submit invoices to Client on a monthly basis. Payment is due
+within thirty (30) days of the invoice date ("Payment Due Date").
+
+3.3 Any amounts not paid by the Payment Due Date shall accrue interest at the
+rate of one and one-half percent (1.5%) per month, or the maximum rate permitted
+by applicable law, whichever is lower, from the Payment Due Date until paid.
+
+3.4 All fees are exclusive of applicable taxes. Client shall be responsible for
+all sales, use, value-added, and similar taxes imposed on the Services.
+
+
+SECTION 4 — INTELLECTUAL PROPERTY
+
+4.1 Vendor Retained IP. Vendor retains all right, title, and interest in and to
+any pre-existing intellectual property and any general tools, methodologies,
+frameworks, or know-how developed by Vendor independently of this Agreement.
+
+4.2 Client IP. Upon full payment of all fees, Vendor hereby assigns to Client
+all right, title, and interest in and to Deliverables specifically created for
+Client under a SOW, excluding Vendor Retained IP incorporated therein.
+
+4.3 License to Vendor Retained IP. To the extent Vendor Retained IP is
+incorporated into Deliverables, Vendor grants Client a non-exclusive, worldwide,
+perpetual licence to use such Vendor Retained IP solely as incorporated in the
+Deliverables.
+
+
+SECTION 5 — CONFIDENTIALITY
+
+5.1 Each party agrees to maintain the confidentiality of the other party's
+Confidential Information using at least the same degree of care it uses to
+protect its own confidential information, but in no event less than reasonable
+care.
+
+5.2 Each party agrees not to disclose the other party's Confidential Information
+to any third party without the prior written consent of the disclosing party,
+except to its employees and contractors who have a need to know and are bound by
+confidentiality obligations no less restrictive than those set forth herein.
+
+5.3 The obligations of this Section 5 shall not apply to information that:
+(a) is or becomes publicly available through no fault of the receiving party;
+(b) was known to the receiving party prior to disclosure;
+(c) is independently developed by the receiving party without use of the
+Confidential Information; or
+(d) is required to be disclosed by law or court order, provided the receiving
+party gives the disclosing party prompt written notice.
+
+5.4 The confidentiality obligations in this Section 5 shall survive termination
+or expiration of this Agreement for a period of five (5) years.
+
+
+SECTION 6 — DATA PROTECTION
+
+6.1 Each party shall comply with all applicable data protection laws and
+regulations, including the General Data Protection Regulation (GDPR) where
+applicable.
+
+6.2 To the extent Vendor processes personal data on behalf of Client, the
+parties shall enter into a Data Processing Agreement ("DPA") that complies
+with applicable data protection laws.
+
+6.3 Vendor shall implement and maintain appropriate technical and organisational
+measures to protect personal data against unauthorised or unlawful processing,
+accidental loss, destruction, or damage.
+
+
+SECTION 7 — REPRESENTATIONS AND WARRANTIES
+
+7.1 Each party represents and warrants that: (a) it has full authority to enter
+into this Agreement; (b) the execution of this Agreement does not violate any
+other agreement to which it is a party; and (c) it will comply with all
+applicable laws and regulations in performing its obligations hereunder.
+
+7.2 Vendor represents and warrants that the Services will be performed in a
+professional manner consistent with industry standards and that the Deliverables
+will materially conform to the specifications set forth in the applicable SOW for
+a period of ninety (90) days following acceptance.
+
+7.3 EXCEPT AS EXPRESSLY SET FORTH IN THIS AGREEMENT, NEITHER PARTY MAKES ANY
+WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO IMPLIED WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.
+
+
+SECTION 8 — INDEMNIFICATION AND LIABILITY
+
+8.1 Vendor Indemnification. Vendor shall indemnify, defend, and hold harmless
+Apex Corp and its officers, directors, employees, agents, successors, and assigns
+("Client Indemnitees") from and against any and all claims, damages, losses,
+costs, and expenses (including reasonable legal fees) ("Losses") arising out of
+or resulting from: (a) Vendor's breach of this Agreement; (b) the gross
+negligence or wilful misconduct of Vendor; or (c) any claim that the Deliverables
+infringe any third-party Intellectual Property Rights. The aggregate liability of
+Vendor under this Section 8.1 shall not exceed the total fees paid by Apex Corp
+to Vendor in the twelve (12) months immediately preceding the claim giving rise
+to liability.
+
+8.2 Client Indemnification. Client shall indemnify, defend, and hold harmless
+Vendor and its officers, directors, and employees from and against any Losses
+arising out of or resulting from: (a) Client's breach of this Agreement; or
+(b) Client's use of the Deliverables in violation of this Agreement.
+
+8.3 Exclusion of Consequential Damages. IN NO EVENT SHALL EITHER PARTY BE
+LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR
+CONSEQUENTIAL DAMAGES, INCLUDING BUT NOT LIMITED TO LOST PROFITS, LOSS OF DATA,
+LOSS OF GOODWILL, BUSINESS INTERRUPTION, OR COST OF SUBSTITUTE GOODS OR
+SERVICES, HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE), ARISING OUT OF OR
+IN CONNECTION WITH THIS AGREEMENT, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGES.
+
+8.4 Essential Basis. The parties acknowledge that the limitations of liability in
+this Section 8 reflect a reasonable allocation of risk and form an essential
+basis of the bargain between the parties. Without these limitations, Vendor would
+not have entered into this Agreement.
+
+
+SECTION 9 — TERM AND TERMINATION
+
+9.1 Term. This Agreement shall commence on the Effective Date and continue for
+an initial term of three (3) years ("Initial Term"), unless earlier terminated.
+After the Initial Term, this Agreement shall automatically renew for successive
+one-year periods unless either party provides written notice of non-renewal at
+least ninety (90) days prior to the end of the then-current term.
+
+9.2 Termination for Cause. Either party may terminate this Agreement immediately
+upon written notice if the other party: (a) materially breaches this Agreement
+and fails to cure such breach within thirty (30) days after receipt of written
+notice; or (b) becomes insolvent, makes an assignment for the benefit of
+creditors, or is subject to bankruptcy proceedings.
+
+9.3 Termination for Convenience. Client may terminate this Agreement for any
+reason upon ninety (90) days' written notice to Vendor. In the event of such
+termination, Client shall pay Vendor for all Services satisfactorily performed
+through the date of termination.
+
+9.4 Effect of Termination. Upon termination or expiration of this Agreement:
+(a) all outstanding SOWs shall terminate; (b) each party shall promptly return
+or destroy all Confidential Information of the other party; and (c) Vendor shall
+deliver to Client all partially completed Deliverables.
+
+
+SECTION 10 — FORCE MAJEURE
+
+10.1 Neither party shall be liable for any failure or delay in performance under
+this Agreement to the extent caused by circumstances beyond such party's
+reasonable control, including but not limited to acts of God, natural disasters,
+pandemic or epidemic, war, terrorism, civil unrest, government action, labour
+disputes not involving that party's employees, or failures of third-party
+telecommunications or internet infrastructure ("Force Majeure Event").
+
+10.2 The affected party shall: (a) promptly notify the other party of the Force
+Majeure Event; (b) use commercially reasonable efforts to mitigate the effects;
+and (c) resume performance as soon as practicable after the cessation of the
+Force Majeure Event.
+
+10.3 If a Force Majeure Event continues for more than sixty (60) consecutive
+days, either party may terminate the applicable SOW without liability upon
+written notice.
+
+
+SECTION 11 — DISPUTE RESOLUTION
+
+11.1 Negotiation. The parties shall attempt to resolve any dispute arising out
+of or relating to this Agreement through good-faith negotiation between senior
+representatives of each party. Either party may initiate this process by
+providing written notice to the other.
+
+11.2 Arbitration. If the dispute is not resolved through negotiation within
+thirty (30) days of the notice, it shall be finally resolved by binding
+arbitration administered by the International Chamber of Commerce ("ICC") in
+accordance with its Rules of Arbitration. The arbitration shall be conducted
+by a single arbitrator, in the English language, in London, England.
+
+11.3 Governing Law. This Agreement shall be governed by and construed in
+accordance with the laws of England and Wales, without regard to its conflict
+of law principles.
+
+11.4 Injunctive Relief. Nothing in this Section 11 shall prevent either party
+from seeking injunctive or other equitable relief from a court of competent
+jurisdiction to prevent irreparable harm.
+
+
+SECTION 12 — GENERAL PROVISIONS
+
+12.1 Entire Agreement. This Agreement, together with all SOWs and the DPA,
+constitutes the entire agreement between the parties with respect to its subject
+matter and supersedes all prior negotiations, representations, or agreements.
+
+12.2 Amendment. This Agreement may not be amended except by a written instrument
+signed by authorised representatives of both parties.
+
+12.3 Waiver. No waiver of any provision of this Agreement shall be effective
+unless in writing. No waiver shall be deemed a continuing waiver.
+
+12.4 Severability. If any provision of this Agreement is held invalid or
+unenforceable, the remaining provisions shall remain in full force and effect.
+
+12.5 Assignment. Neither party may assign this Agreement without the prior
+written consent of the other party, except that either party may assign this
+Agreement in connection with a merger, acquisition, or sale of all or
+substantially all of its assets.
+
+12.6 Notices. All notices shall be in writing and delivered by hand, overnight
+courier, or email with confirmation of receipt to the addresses set forth on
+the signature page.
+
+12.7 Counterparts. This Agreement may be executed in counterparts, each of
+which shall be deemed an original.
+
+
+IN WITNESS WHEREOF, the parties have executed this Agreement as of the date
+first written above.
+
+APEX CORPORATION                        VENDOR TECHNOLOGY LTD.
+
+By: _______________________             By: _______________________
+Name: Sarah Mitchell                    Name: James Hartley
+Title: Chief Legal Officer              Title: Chief Executive Officer
+Date: June 15, 2023                     Date: June 15, 2023

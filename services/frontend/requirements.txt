@@ -1,0 +1,20 @@
+# ── Core UI framework ──────────────────────────────────────
+streamlit==1.35.0
+
+# ── API communication ──────────────────────────────────────
+# Synchronous HTTP client — used for all calls to the FastAPI backend.
+# Streamlit runs in a sync context so we use httpx (not aiohttp).
+httpx==0.27.0
+
+# ── Data display ───────────────────────────────────────────
+pandas==2.2.2           # Powers st.dataframe() in the evaluation dashboard
+
+# ── Charts ─────────────────────────────────────────────────
+plotly==5.22.0          # Faithfulness trend chart with CI/CD gate line
+
+# ── Streamlit performance extras ───────────────────────────
+# watchdog speeds up Streamlit's file change detection in development
+watchdog==4.0.1
+
+# ── Utilities ──────────────────────────────────────────────
+python-dotenv==1.0.1    # Load .env for local dev outside Docker
