@@ -174,9 +174,9 @@ jobs:
           echo "Waiting for Postgres..."
           until pg_isready -h localhost -U admin -d legalmind_db; do sleep 1; done
           echo "Waiting for Redis..."
-          until redis-cli -h localhost ping | grep -q PONG; do sleep 1; done
+          until bash -c "</dev/tcp/localhost/6379" 2>/dev/null; do sleep 1; done
           echo "Waiting for Qdrant..."
-          until curl -sf http://localhost:6333/healthz; do sleep 1; done
+          until bash -c "</dev/tcp/localhost/6333" 2>/dev/null; do sleep 1; done
           echo "All services healthy ✅"
 
       - name: Initialise database schema
@@ -279,4 +279,5 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: legalmind-frontend:ci
+
 
