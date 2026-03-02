@@ -115,11 +115,6 @@ jobs:
         image: qdrant/qdrant:v1.9.2
         ports:
           - 6333:6333
-        options: >-
-          --health-cmd "curl -f http://localhost:6333/healthz"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
 
       redis:
         image: redis:7.2-alpine
@@ -284,3 +279,4 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: legalmind-frontend:ci
+
