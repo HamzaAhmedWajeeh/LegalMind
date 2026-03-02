@@ -25,9 +25,9 @@ env:
   COHERE_API_KEY:     ${{ secrets.COHERE_API_KEY }}
   # DeepEval uses GEMINI_API_KEY above — no separate secret needed
   # Postgres config for the service container
-  POSTGRES_USER:     legalmind
-  POSTGRES_PASSWORD: legalmind_ci
-  POSTGRES_DB:       legalmind_test
+  POSTGRES_USER:     admin
+  POSTGRES_PASSWORD: admin
+  POSTGRES_DB:       legalmind_db
   # App settings
   ENVIRONMENT:       development
   MIN_FAITHFULNESS_SCORE: "0.9"
@@ -74,7 +74,7 @@ jobs:
       - name: Run unit tests (excluding integration)
         working-directory: services/api
         env:
-          POSTGRES_URL: postgresql+asyncpg://legalmind:legalmind_ci@localhost/legalmind_test
+          POSTGRES_URL: postgresql+asyncpg://admin:admin@localhost/legalmind_db
           REDIS_URL: redis://localhost:6379/0
           QDRANT_HOST: localhost
           QDRANT_PORT: "6333"
@@ -136,11 +136,11 @@ jobs:
         ports:
           - 5432:5432
         env:
-          POSTGRES_USER:     legalmind
-          POSTGRES_PASSWORD: legalmind_ci
-          POSTGRES_DB:       legalmind_test
+          POSTGRES_USER:     admin
+          POSTGRES_PASSWORD: admin
+          POSTGRES_DB:       legalmind_db
         options: >-
-          --health-cmd "pg_isready -U legalmind -d legalmind_test"
+          --health-cmd "pg_isready -U admin -d legalmind_db"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -177,7 +177,7 @@ jobs:
       - name: Wait for services to be healthy
         run: |
           echo "Waiting for Postgres..."
-          until pg_isready -h localhost -U legalmind; do sleep 1; done
+          until pg_isready -h localhost -U admin -d legalmind_db; do sleep 1; done
           echo "Waiting for Redis..."
           until redis-cli -h localhost ping | grep -q PONG; do sleep 1; done
           echo "Waiting for Qdrant..."
@@ -186,15 +186,15 @@ jobs:
 
       - name: Initialise database schema
         env:
-          PGPASSWORD: legalmind_ci
+          PGPASSWORD: admin
         run: |
-          psql -h localhost -U legalmind -d legalmind_test \
+          psql -h localhost -U admin -d legalmind_db \
             -f services/api/db/init.sql
 
       - name: "🚦 Run Faithfulness Gate Tests"
         working-directory: services/api
         env:
-          POSTGRES_URL:  postgresql+asyncpg://legalmind:legalmind_ci@localhost/legalmind_test
+          POSTGRES_URL:  postgresql+asyncpg://admin:admin@localhost/legalmind_db
           REDIS_URL:     redis://localhost:6379/0
           QDRANT_HOST:   localhost
           QDRANT_PORT:   "6333"
@@ -211,7 +211,7 @@ jobs:
       - name: "📎 Run Citation Validation Tests"
         working-directory: services/api
         env:
-          POSTGRES_URL:  postgresql+asyncpg://legalmind:legalmind_ci@localhost/legalmind_test
+          POSTGRES_URL:  postgresql+asyncpg://admin:admin@localhost/legalmind_db
           REDIS_URL:     redis://localhost:6379/0
           QDRANT_HOST:   localhost
           QDRANT_PORT:   "6333"
@@ -224,7 +224,7 @@ jobs:
       - name: "🔍 Run Retrieval Tests"
         working-directory: services/api
         env:
-          POSTGRES_URL:  postgresql+asyncpg://legalmind:legalmind_ci@localhost/legalmind_test
+          POSTGRES_URL:  postgresql+asyncpg://admin:admin@localhost/legalmind_db
           REDIS_URL:     redis://localhost:6379/0
           QDRANT_HOST:   localhost
           QDRANT_PORT:   "6333"
