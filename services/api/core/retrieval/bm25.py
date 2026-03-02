@@ -23,7 +23,6 @@ Design Pattern: Repository Pattern
   so the hybrid fusion layer can treat them uniformly.
 """
 
-import re
 import string
 from dataclasses import dataclass, field
 from typing import Optional
@@ -268,18 +267,22 @@ def tokenise(text: str) -> list[str]:
     """
     text = text.lower()
 
-    # Preserve hyphenated compound terms
-    text = re.sub(r'(\w)-(\w)', r'\1_HYPHEN_\2', text)
-
-    # Remove punctuation
-    text = text.translate(str.maketrans("", "", string.punctuation))
-
-    # Restore hyphens
-    text = text.replace("_HYPHEN_", "-")
+    # Remove punctuation but keep hyphens inside legal identifiers/terms.
+    punctuation_without_hyphen = string.punctuation.replace("-", "")
+    translation = str.maketrans({ch: " " for ch in punctuation_without_hyphen})
+    text = text.translate(translation)
 
     tokens = text.split()
+    cleaned_tokens: list[str] = []
+    for token in tokens:
+        # Drop leading/trailing hyphens but preserve internal ones (e.g., 2024-001).
+        token = token.strip("-")
+        if not token:
+            continue
+        if token in _LEGAL_STOPWORDS:
+            continue
+        if len(token) < 2:
+            continue
+        cleaned_tokens.append(token)
 
-    return [
-        t for t in tokens
-        if t not in _LEGAL_STOPWORDS and len(t) >= 2
-    ]
+    return cleaned_tokens

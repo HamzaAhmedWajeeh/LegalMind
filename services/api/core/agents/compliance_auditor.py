@@ -55,6 +55,10 @@ class GeminiJudge(DeepEvalBaseLLM):
             )
         return self._model
 
+    def load_model(self):
+        """Required by DeepEvalBaseLLM."""
+        return self._get_model()
+
     def get_model_name(self) -> str:
         return settings.gemini_model
 
@@ -94,6 +98,16 @@ class BatchEvaluationResult:
     passed: bool
 
 
+@dataclass
+class SingleEvalResult:
+    """Backwards-compatible single-case result used by existing tests."""
+    faithfulness: float
+    answer_relevance: float
+    context_precision: float
+    passed: bool
+    failure_reasons: list[str]
+
+
 # ──────────────────────────────────────────────────────────────────
 # Compliance Auditor Agent
 # ──────────────────────────────────────────────────────────────────
@@ -114,11 +128,92 @@ class ComplianceAuditorAgent:
 
     def __init__(self):
         self._judge = None
+        # Backward compatibility for older unit tests that assert lazy-init fields.
+        self._faithfulness_metric = None
+        self._relevance_metric = None
+        self._precision_metric = None
 
     def _get_judge(self) -> GeminiJudge:
         if self._judge is None:
             self._judge = GeminiJudge()
         return self._judge
+
+    def _get_faithfulness_metric(self):
+        if self._faithfulness_metric is None:
+            self._faithfulness_metric = FaithfulnessMetric(
+                threshold=self.FAITHFULNESS_THRESHOLD,
+                model=self._get_judge(),
+                include_reason=True,
+            )
+        return self._faithfulness_metric
+
+    def _get_relevance_metric(self):
+        if self._relevance_metric is None:
+            self._relevance_metric = AnswerRelevancyMetric(
+                threshold=self.RELEVANCE_THRESHOLD,
+                model=self._get_judge(),
+                include_reason=True,
+            )
+        return self._relevance_metric
+
+    def _get_precision_metric(self):
+        if self._precision_metric is None:
+            self._precision_metric = ContextualPrecisionMetric(
+                threshold=self.PRECISION_THRESHOLD,
+                model=self._get_judge(),
+                include_reason=True,
+            )
+        return self._precision_metric
+
+    async def _score_metric(self, metric, test_case: LLMTestCase) -> tuple[float, str]:
+        """Measure one DeepEval metric and return (score, reason)."""
+        loop = asyncio.get_event_loop()
+
+        def _measure():
+            metric.measure(test_case)
+            return (metric.score or 0.0, getattr(metric, "reason", "") or "")
+
+        return await loop.run_in_executor(None, _measure)
+
+    async def _evaluate_single(
+        self,
+        question: str,
+        answer: str,
+        context: list[str],
+    ) -> SingleEvalResult:
+        """Backwards-compatible single-case evaluator used by tests and wrappers."""
+        test_case = LLMTestCase(
+            input=question,
+            actual_output=answer,
+            retrieval_context=context,
+        )
+
+        faithfulness_metric = self._get_faithfulness_metric()
+        relevance_metric = self._get_relevance_metric()
+        precision_metric = self._get_precision_metric()
+
+        faithfulness_score, faithfulness_reason = await self._score_metric(
+            faithfulness_metric, test_case
+        )
+        relevance_score, relevance_reason = await self._score_metric(
+            relevance_metric, test_case
+        )
+        precision_score, precision_reason = await self._score_metric(
+            precision_metric, test_case
+        )
+
+        passed = faithfulness_score >= self.FAITHFULNESS_THRESHOLD
+        failures: list[str] = []
+        if faithfulness_score < self.FAITHFULNESS_THRESHOLD:
+            failures.append(faithfulness_reason or "Faithfulness below threshold")
+
+        return SingleEvalResult(
+            faithfulness=faithfulness_score,
+            answer_relevance=relevance_score,
+            context_precision=precision_score,
+            passed=passed,
+            failure_reasons=failures,
+        )
 
     async def evaluate_response(
         self,
@@ -143,69 +238,34 @@ class ComplianceAuditorAgent:
         log = logger.bind(session_id=session_id, query_preview=query[:60])
         log.info("Compliance audit started")
 
-        judge = self._get_judge()
-
-        test_case = LLMTestCase(
-            input=query,
-            actual_output=response,
-            retrieval_context=context_chunks,
-        )
-
-        faithfulness_metric = FaithfulnessMetric(
-            threshold=self.FAITHFULNESS_THRESHOLD,
-            model=judge,
-            include_reason=True,
-        )
-        relevance_metric = AnswerRelevancyMetric(
-            threshold=self.RELEVANCE_THRESHOLD,
-            model=judge,
-            include_reason=True,
-        )
-        precision_metric = ContextualPrecisionMetric(
-            threshold=self.PRECISION_THRESHOLD,
-            model=judge,
-            include_reason=True,
-        )
-
         try:
-            loop = asyncio.get_event_loop()
-
-            def _run_metrics():
-                faithfulness_metric.measure(test_case)
-                relevance_metric.measure(test_case)
-                precision_metric.measure(test_case)
-
-            await loop.run_in_executor(None, _run_metrics)
-
-            faithfulness_score = faithfulness_metric.score or 0.0
-            relevance_score = relevance_metric.score or 0.0
-            precision_score = precision_metric.score or 0.0
-
-            passed = faithfulness_score >= self.FAITHFULNESS_THRESHOLD
+            single = await self._evaluate_single(
+                question=query,
+                answer=response,
+                context=context_chunks,
+            )
 
             result = EvaluationResult(
-                faithfulness=faithfulness_score,
-                answer_relevance=relevance_score,
-                context_precision=precision_score,
-                passed=passed,
+                faithfulness=single.faithfulness,
+                answer_relevance=single.answer_relevance,
+                context_precision=single.context_precision,
+                passed=single.passed,
                 details={
-                    "faithfulness_reason": faithfulness_metric.reason,
-                    "relevance_reason": relevance_metric.reason,
-                    "precision_reason": precision_metric.reason,
+                    "failure_reasons": single.failure_reasons,
                 },
             )
 
-            if passed:
+            if result.passed:
                 log.info(
                     "Compliance audit PASSED",
-                    faithfulness=faithfulness_score,
-                    relevance=relevance_score,
-                    precision=precision_score,
+                    faithfulness=result.faithfulness,
+                    relevance=result.answer_relevance,
+                    precision=result.context_precision,
                 )
             else:
                 log.warning(
                     "Compliance audit FAILED — faithfulness below threshold",
-                    faithfulness=faithfulness_score,
+                    faithfulness=result.faithfulness,
                     threshold=self.FAITHFULNESS_THRESHOLD,
                 )
 
