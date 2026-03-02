@@ -12,7 +12,7 @@ Why rerank?
 
   Spec requirement:
     - Input  : top 20 retrieved chunks (from hybrid.py)
-    - Output : top 5 most relevant chunks (passed to Claude)
+    - Output : top 5 most relevant chunks (passed to Gemini)
 
   Cohere Rerank v3 is used as specified. It's accessible via API,
   requires no local GPU, and is state-of-the-art for retrieval tasks.

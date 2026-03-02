@@ -18,7 +18,7 @@ LegalMind's Shepardizer automates it for internal citations.
 
 What it validates:
   1. EXISTENCE   — Does [SOURCE: filename | Chunk N] reference a chunk
-                   that was actually retrieved and provided to Claude?
+                   that was actually retrieved and provided to Gemini?
   2. RELEVANCE   — Does the cited chunk's text actually support the
                    claim it was cited for? (semantic similarity check)
   3. ACCURACY    — Does the filename and chunk_index match a real
@@ -128,8 +128,8 @@ class ShepardizierAgent:
         Validate all citations in a RAG response.
 
         Args:
-            response_text : The full text of Claude's response
-            ranked_chunks : The chunks that were actually provided to Claude
+            response_text : The full text of Gemini's response
+            ranked_chunks : The chunks that were actually provided to Gemini
                             (from the reranker — these are the only valid sources)
 
         Returns:
@@ -229,7 +229,7 @@ class ShepardizierAgent:
             validation.status = CitationStatus.INVALID
             validation.issues.append(
                 f"Citation [{filename} | Chunk {chunk_index}] was NOT in the retrieved "
-                f"context provided to Claude. This is a fabricated citation."
+                f"context provided to Gemini. This is a fabricated citation."
             )
             # Short-circuit — no point running other validators
             return validation
@@ -357,4 +357,4 @@ def _compute_relevance(claim_text: str, chunk_text: str) -> float:
 
 
 # ── Module-level singleton ─────────────────────────────────────────
-shepardizer = ShepardizierAgent()\
+shepardizer = ShepardizierAgent()

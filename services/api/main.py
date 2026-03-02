@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
     logger.info(
         "LegalMind API starting",
         environment=settings.environment,
-        model=settings.anthropic_model,
+        model=settings.gemini_model,
     )
     await init_db()
     logger.info("Database ready")

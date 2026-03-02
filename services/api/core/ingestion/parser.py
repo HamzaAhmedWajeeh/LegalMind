@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Optional
 
 import pdfplumber
-import pytesseract
+# pytesseract imported lazily in _ocr_page() to avoid pandas/numpy conflict
 import structlog
 from PIL import Image
 from docx import Document as DocxDocument
@@ -170,8 +170,15 @@ def _ocr_page(page) -> str:
     """
     Render a pdfplumber page to an image and run pytesseract OCR.
     Returns empty string if OCR is unavailable or fails.
+    pytesseract is imported lazily here to avoid its pandas dependency
+    conflicting with deepeval's numpy at module load time.
     """
     try:
+        try:
+            import pytesseract  # noqa: PLC0415
+        except ImportError:
+            logger.debug("pytesseract not installed — OCR unavailable")
+            return ""
         # Render at 300 DPI for good OCR accuracy
         pil_image = page.to_image(resolution=300).original
         text = pytesseract.image_to_string(pil_image, lang="eng")

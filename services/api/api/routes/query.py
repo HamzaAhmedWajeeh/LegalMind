@@ -4,7 +4,7 @@ api/routes/query.py
 Legal query endpoint — the main RAG pipeline entry point.
 
 POST /query  — Run a legal question through the full pipeline:
-               hybrid retrieval → rerank → Claude → Shepardize
+               hybrid retrieval → rerank → Gemini → Shepardize
                Returns the answer, sources, and a citation health report.
 
 GET  /query/history — Retrieve past queries from the audit log.
@@ -40,7 +40,7 @@ async def legal_query(request: QueryRequest):
       1. Semantic cache lookup
       2. Hybrid retrieval (vector + BM25 → RRF)
       3. Cohere cross-encoder reranking (top-20 → top-5)
-      4. Claude generation with mandatory citations
+      4. Gemini generation with mandatory citations
       5. Shepardizer citation validation
       6. Compliance Auditor faithfulness check (async, non-blocking)
 

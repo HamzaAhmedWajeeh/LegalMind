@@ -10,7 +10,7 @@ Spec requirement:
 
 What we test:
   1. Valid citations   — all [SOURCE: ...] tags map to real retrieved chunks
-  2. Fabricated citations — Claude cites a document that wasn't in context
+  2. Fabricated citations — Gemini cites a document that wasn't in context
   3. Missing citations — response has no citations at all (should fail)
   4. Relevance check  — cited chunk is semantically related to the claim
   5. Citation parser  — the regex correctly extracts all citation formats

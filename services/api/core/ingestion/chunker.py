@@ -34,7 +34,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 logger = structlog.get_logger(__name__)
 
-# tiktoken encoding for Claude / GPT-4 compatible token counting
+# tiktoken encoding for Gemini / GPT-4 compatible token counting
 _ENCODING = tiktoken.get_encoding("cl100k_base")
 
 

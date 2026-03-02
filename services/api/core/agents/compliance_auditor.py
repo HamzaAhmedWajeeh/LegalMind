@@ -1,47 +1,24 @@
 """
 core/agents/compliance_auditor.py
 ===================================
-Compliance Auditor Agent — LLM-as-judge faithfulness evaluator.
+Compliance Auditor Agent — RAG Triad evaluation using DeepEval.
 
-Role (from spec):
-  "It extracts individual claims from the RAG system's response and
-   cross-references each one against the retrieved legal chunks.
-   It calculates the Faithfulness score (Groundedness). If the RAG
-   system claims a specific indemnity exists but the source text says
-   otherwise, the Auditor agent flags a hallucination and fails the
-   unit test."
+Uses Google Gemini 2.5 Pro as the judge LLM.
+Uses a custom DeepEvalBaseLLM wrapper since deepeval 0.21.x predates
+the official Gemini integration.
 
-Design Pattern: OBSERVER PATTERN
-  This agent registers itself as a post-generation hook on RAGService:
-
-    rag_service.register_hook(compliance_auditor.evaluate_response)
-
-  After every RAG response is generated, the hook fires automatically.
-  The RAGService doesn't know about the Auditor — it just calls all
-  registered hooks. This decouples evaluation from generation completely.
-
-Two modes of operation:
-  1. ONLINE (per-request): Registered as a hook — runs after every
-     query automatically. Results logged but don't block the response.
-
-  2. BATCH (CI/CD eval): Called directly with a full golden dataset
-     via `run_evaluation()`. Returns an EvalResult used by pytest
-     to pass/fail the CI/CD gate.
-
-Evaluation framework: DeepEval
-  Uses DeepEval's FaithfulnessMetric which:
-  1. Extracts individual factual claims from the answer
-  2. For each claim, asks the LLM: "Is this claim supported by the context?"
-  3. Faithfulness = (supported claims) / (total claims)
+Design Pattern: Observer Pattern
+  The RAGService notifies this agent after every generation.
+  Online mode: non-blocking background evaluation.
+  Batch mode:  blocking evaluation for CI/CD gate.
 """
 
-import uuid
-from dataclasses import dataclass, field
+import asyncio
+from dataclasses import dataclass
 from typing import Optional
 
 import structlog
-from deepeval import evaluate
-from deepeval.models import AnthropicModel
+from deepeval.models import DeepEvalBaseLLM
 from deepeval.metrics import (
     FaithfulnessMetric,
     AnswerRelevancyMetric,
@@ -49,30 +26,64 @@ from deepeval.metrics import (
 )
 from deepeval.test_case import LLMTestCase
 
+from api.models.schemas import QueryRequest
 from core.config import get_settings
-from api.models.schemas import QueryRequest, QueryResponse
+from core.generation.rag_service import rag_service
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
 
 
 # ──────────────────────────────────────────────────────────────────
-# Result dataclasses
+# Custom Gemini judge for DeepEval
+# ──────────────────────────────────────────────────────────────────
+class GeminiJudge(DeepEvalBaseLLM):
+    """
+    Wraps Google Gemini for use as DeepEval's judge LLM.
+    DeepEval calls generate() / a_generate() to score responses.
+    """
+
+    def __init__(self):
+        self._model = None
+
+    def _get_model(self):
+        if self._model is None:
+            import google.generativeai as genai
+            genai.configure(api_key=settings.gemini_api_key)
+            self._model = genai.GenerativeModel(
+                model_name=settings.gemini_model,
+            )
+        return self._model
+
+    def get_model_name(self) -> str:
+        return settings.gemini_model
+
+    def generate(self, prompt: str) -> str:
+        """Synchronous generate — called by DeepEval internals."""
+        model = self._get_model()
+        response = model.generate_content(prompt)
+        return response.text
+
+    async def a_generate(self, prompt: str) -> str:
+        """Async generate — runs sync client in thread pool."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.generate, prompt)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Evaluation result dataclass
 # ──────────────────────────────────────────────────────────────────
 @dataclass
-class SingleEvalResult:
-    """Evaluation result for one query-response pair."""
-    question: str
+class EvaluationResult:
     faithfulness: float
     answer_relevance: float
     context_precision: float
     passed: bool
-    failure_reasons: list[str] = field(default_factory=list)
+    details: dict
 
 
 @dataclass
-class BatchEvalResult:
-    """Aggregated evaluation result for a full eval run."""
+class BatchEvaluationResult:
     run_id: str
     total_cases: int
     passed_cases: int
@@ -80,8 +91,7 @@ class BatchEvalResult:
     avg_faithfulness: float
     avg_answer_relevance: float
     avg_context_precision: float
-    passed: bool                      # True if avg_faithfulness >= threshold
-    individual_results: list[SingleEvalResult] = field(default_factory=list)
+    passed: bool
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -89,196 +99,146 @@ class BatchEvalResult:
 # ──────────────────────────────────────────────────────────────────
 class ComplianceAuditorAgent:
     """
-    DeepEval-powered faithfulness evaluator.
+    Evaluates RAG responses using the RAG Triad metrics via DeepEval.
+    Uses Gemini 2.5 Pro as the judge LLM.
 
-    Registered as an Observer on RAGService so it fires automatically
-    after each generation without coupling to the generation code.
+    Metrics:
+      - Faithfulness       ≥ 0.9  (CI/CD gate)
+      - Answer Relevance   ≥ 0.7
+      - Context Precision  ≥ 0.7
     """
 
+    FAITHFULNESS_THRESHOLD = 0.9
+    RELEVANCE_THRESHOLD = 0.7
+    PRECISION_THRESHOLD = 0.7
+
     def __init__(self):
-        # DeepEval metrics — initialised lazily to avoid startup delay
-        self._faithfulness_metric: Optional[FaithfulnessMetric] = None
-        self._relevance_metric: Optional[AnswerRelevancyMetric] = None
-        self._precision_metric: Optional[ContextualPrecisionMetric] = None
+        self._judge = None
 
-    # ── Metric initialisation ──────────────────────────────────────
-    def _get_judge_model(self) -> AnthropicModel:
-        # DeepEval uses ANTHROPIC_API_KEY directly — no separate key needed.
-        # Passing model and api_key explicitly makes the dependency clear.
-        return AnthropicModel(
-            model=settings.anthropic_model,
-            api_key=settings.anthropic_api_key,
-            temperature=0,
-        )
+    def _get_judge(self) -> GeminiJudge:
+        if self._judge is None:
+            self._judge = GeminiJudge()
+        return self._judge
 
-    def _get_faithfulness_metric(self) -> FaithfulnessMetric:
-        if self._faithfulness_metric is None:
-            self._faithfulness_metric = FaithfulnessMetric(
-                threshold=settings.min_faithfulness_score,
-                model=self._get_judge_model(),
-                include_reason=True,
-            )
-        return self._faithfulness_metric
-
-    def _get_relevance_metric(self) -> AnswerRelevancyMetric:
-        if self._relevance_metric is None:
-            self._relevance_metric = AnswerRelevancyMetric(
-                threshold=0.7,
-                model=self._get_judge_model(),
-                include_reason=True,
-            )
-        return self._relevance_metric
-
-    def _get_precision_metric(self) -> ContextualPrecisionMetric:
-        if self._precision_metric is None:
-            self._precision_metric = ContextualPrecisionMetric(
-                threshold=0.7,
-                model=self._get_judge_model(),
-                include_reason=True,
-            )
-        return self._precision_metric
-
-    # ── Observer hook (called by RAGService after each response) ───
     async def evaluate_response(
         self,
-        request: QueryRequest,
-        response: QueryResponse,
-    ) -> None:
+        query: str,
+        response: str,
+        context_chunks: list[str],
+        session_id: Optional[str] = None,
+        persist_result: bool = True,
+    ) -> EvaluationResult:
         """
-        Observer hook — fires automatically after every RAG generation.
+        Run RAG Triad evaluation on a single query/response pair.
 
-        Logs the faithfulness score. Does NOT block or modify the
-        response — the user always receives their answer regardless
-        of the evaluation outcome.
-
-        Registered via: rag_service.register_hook(auditor.evaluate_response)
-        """
-        # Skip evaluation if response came from cache or has no sources
-        if response.cache_hit or not response.sources:
-            return
-
-        try:
-            result = await self._evaluate_single(
-                question=request.query,
-                answer=response.answer,
-                context=[src.text for src in response.sources],
-                expected_output=None,   # No expected output for live queries
-            )
-
-            if result.passed:
-                logger.info(
-                    "Compliance audit PASSED",
-                    faithfulness=round(result.faithfulness, 3),
-                    relevance=round(result.answer_relevance, 3),
-                    precision=round(result.context_precision, 3),
-                )
-            else:
-                logger.warning(
-                    "Compliance audit FAILED — potential hallucination detected",
-                    faithfulness=round(result.faithfulness, 3),
-                    threshold=settings.min_faithfulness_score,
-                    reasons=result.failure_reasons,
-                    query_preview=request.query[:80],
-                )
-
-        except Exception as exc:
-            # Evaluation failures must never surface to the user
-            logger.error("Compliance audit error", error=str(exc))
-
-    # ── Single test case evaluation ────────────────────────────────
-    async def _evaluate_single(
-        self,
-        question: str,
-        answer: str,
-        context: list[str],
-        expected_output: Optional[str] = None,
-    ) -> SingleEvalResult:
-        """
-        Run all three RAG Triad metrics on a single query-response pair.
+        Args:
+            query         : The user's legal question
+            response      : LegalMind's generated answer
+            context_chunks: Raw text of the retrieved chunks used
+            session_id    : For logging
 
         Returns:
-            SingleEvalResult with faithfulness, relevance, precision scores
+            EvaluationResult with all three metric scores
         """
-        import asyncio
+        log = logger.bind(session_id=session_id, query_preview=query[:60])
+        log.info("Compliance audit started")
 
-        # Build DeepEval test case
+        judge = self._get_judge()
+
         test_case = LLMTestCase(
-            input=question,
-            actual_output=answer,
-            expected_output=expected_output or answer,  # Use actual as fallback
-            retrieval_context=context,
+            input=query,
+            actual_output=response,
+            retrieval_context=context_chunks,
         )
 
-        # Run metrics (synchronous DeepEval calls wrapped in executor)
-        loop = asyncio.get_event_loop()
-
-        faithfulness_score, faithfulness_reason = await loop.run_in_executor(
-            None, lambda: self._score_metric(self._get_faithfulness_metric(), test_case)
+        faithfulness_metric = FaithfulnessMetric(
+            threshold=self.FAITHFULNESS_THRESHOLD,
+            model=judge,
+            include_reason=True,
         )
-        relevance_score, relevance_reason = await loop.run_in_executor(
-            None, lambda: self._score_metric(self._get_relevance_metric(), test_case)
+        relevance_metric = AnswerRelevancyMetric(
+            threshold=self.RELEVANCE_THRESHOLD,
+            model=judge,
+            include_reason=True,
         )
-        precision_score, precision_reason = await loop.run_in_executor(
-            None, lambda: self._score_metric(self._get_precision_metric(), test_case)
-        )
-
-        # Determine pass/fail — faithfulness is the hard gate
-        passed = faithfulness_score >= settings.min_faithfulness_score
-        failure_reasons = []
-        if not passed:
-            failure_reasons.append(
-                f"Faithfulness {faithfulness_score:.3f} < {settings.min_faithfulness_score} threshold"
-            )
-            if faithfulness_reason:
-                failure_reasons.append(faithfulness_reason)
-
-        return SingleEvalResult(
-            question=question,
-            faithfulness=faithfulness_score,
-            answer_relevance=relevance_score,
-            context_precision=precision_score,
-            passed=passed,
-            failure_reasons=failure_reasons,
+        precision_metric = ContextualPrecisionMetric(
+            threshold=self.PRECISION_THRESHOLD,
+            model=judge,
+            include_reason=True,
         )
 
-    def _score_metric(self, metric, test_case: LLMTestCase) -> tuple[float, str]:
-        """Run a single DeepEval metric and return (score, reason)."""
         try:
-            metric.measure(test_case)
-            return metric.score, getattr(metric, "reason", "") or ""
-        except Exception as exc:
-            logger.error("Metric scoring failed", metric=type(metric).__name__, error=str(exc))
-            return 0.0, str(exc)
+            loop = asyncio.get_event_loop()
 
-    # ── Batch evaluation (CI/CD eval runs) ────────────────────────
+            def _run_metrics():
+                faithfulness_metric.measure(test_case)
+                relevance_metric.measure(test_case)
+                precision_metric.measure(test_case)
+
+            await loop.run_in_executor(None, _run_metrics)
+
+            faithfulness_score = faithfulness_metric.score or 0.0
+            relevance_score = relevance_metric.score or 0.0
+            precision_score = precision_metric.score or 0.0
+
+            passed = faithfulness_score >= self.FAITHFULNESS_THRESHOLD
+
+            result = EvaluationResult(
+                faithfulness=faithfulness_score,
+                answer_relevance=relevance_score,
+                context_precision=precision_score,
+                passed=passed,
+                details={
+                    "faithfulness_reason": faithfulness_metric.reason,
+                    "relevance_reason": relevance_metric.reason,
+                    "precision_reason": precision_metric.reason,
+                },
+            )
+
+            if passed:
+                log.info(
+                    "Compliance audit PASSED",
+                    faithfulness=faithfulness_score,
+                    relevance=relevance_score,
+                    precision=precision_score,
+                )
+            else:
+                log.warning(
+                    "Compliance audit FAILED — faithfulness below threshold",
+                    faithfulness=faithfulness_score,
+                    threshold=self.FAITHFULNESS_THRESHOLD,
+                )
+
+            if persist_result:
+                await _save_single_eval_result(result, session_id)
+            return result
+
+        except Exception as exc:
+            log.error("Compliance audit error", error=str(exc))
+            return EvaluationResult(
+                faithfulness=0.0,
+                answer_relevance=0.0,
+                context_precision=0.0,
+                passed=False,
+                details={"error": str(exc)},
+            )
+
     async def run_evaluation(
         self,
         run_id: str,
         dataset_size: Optional[int] = None,
-    ) -> BatchEvalResult:
+    ) -> BatchEvaluationResult:
         """
-        Run a full evaluation against the golden dataset.
-
-        Called by the /evaluate/run endpoint and by pytest (Step 9).
-        Fetches QA pairs from the golden_dataset table, runs the RAG
-        pipeline on each question, then evaluates the response.
-
-        Args:
-            run_id       : Unique identifier for this eval run
-            dataset_size : How many golden dataset entries to evaluate
-                           (defaults to all active entries)
-
-        Returns:
-            BatchEvalResult persisted to eval_runs table
+        Run a batch evaluation over active golden dataset entries.
+        This is used by /evaluate/run and CI/CD guardrails.
         """
-        log = logger.bind(run_id=run_id)
+        size = dataset_size or settings.golden_dataset_size
+        log = logger.bind(run_id=run_id, dataset_size=size)
         log.info("Batch evaluation started")
 
-        # ── Load golden dataset ────────────────────────────────────
-        entries = await self._load_golden_dataset(limit=dataset_size)
+        entries = await _load_golden_dataset_entries(limit=size)
         if not entries:
-            log.warning("Golden dataset is empty — run generate-dataset first")
-            return BatchEvalResult(
+            result = BatchEvaluationResult(
                 run_id=run_id,
                 total_cases=0,
                 passed_cases=0,
@@ -288,113 +248,129 @@ class ComplianceAuditorAgent:
                 avg_context_precision=0.0,
                 passed=False,
             )
+            await _save_batch_eval_result(result)
+            log.warning("Batch evaluation skipped: no active golden dataset entries")
+            return result
 
-        log.info("Golden dataset loaded", entries=len(entries))
+        scores_f: list[float] = []
+        scores_r: list[float] = []
+        scores_p: list[float] = []
+        passed_cases = 0
+        failed_cases = 0
 
-        # ── Run RAG pipeline on each question ──────────────────────
-        from core.generation.rag_service import rag_service
-        from api.models.schemas import QueryRequest
-
-        individual_results: list[SingleEvalResult] = []
-
-        for i, entry in enumerate(entries):
-            log.info("Evaluating entry", index=i + 1, total=len(entries))
+        for idx, entry in enumerate(entries, start=1):
             try:
-                # Run the RAG pipeline (cache disabled for eval runs)
-                rag_request = QueryRequest(query=entry["question"])
-                rag_response = await rag_service.query(
-                    rag_request,
+                query_response = await rag_service.query(
+                    QueryRequest(query=entry.question, session_id=f"eval:{run_id}"),
                     cache_enabled=False,
                 )
-
-                # Evaluate with the expected answer as ground truth
-                result = await self._evaluate_single(
-                    question=entry["question"],
-                    answer=rag_response.answer,
-                    context=[src.text for src in rag_response.sources],
-                    expected_output=entry["expected_answer"],
+                eval_result = await self.evaluate_response(
+                    query=entry.question,
+                    response=query_response.answer,
+                    context_chunks=[src.text for src in query_response.sources],
+                    session_id=f"{run_id}:{idx}",
+                    persist_result=False,
                 )
-                individual_results.append(result)
-
             except Exception as exc:
-                log.error("Evaluation case failed", entry_index=i, error=str(exc))
-                individual_results.append(SingleEvalResult(
-                    question=entry["question"],
+                log.error("Case evaluation failed", case_index=idx, error=str(exc))
+                eval_result = EvaluationResult(
                     faithfulness=0.0,
                     answer_relevance=0.0,
                     context_precision=0.0,
                     passed=False,
-                    failure_reasons=[f"Pipeline error: {exc}"],
-                ))
+                    details={"error": str(exc)},
+                )
 
-        # ── Aggregate results ──────────────────────────────────────
-        total = len(individual_results)
-        passed_count = sum(1 for r in individual_results if r.passed)
-        failed_count = total - passed_count
+            scores_f.append(eval_result.faithfulness)
+            scores_r.append(eval_result.answer_relevance)
+            scores_p.append(eval_result.context_precision)
+            if eval_result.passed:
+                passed_cases += 1
+            else:
+                failed_cases += 1
 
-        avg_faithfulness    = sum(r.faithfulness for r in individual_results) / max(total, 1)
-        avg_relevance       = sum(r.answer_relevance for r in individual_results) / max(total, 1)
-        avg_precision       = sum(r.context_precision for r in individual_results) / max(total, 1)
+        total = len(entries)
+        avg_f = sum(scores_f) / total
+        avg_r = sum(scores_r) / total
+        avg_p = sum(scores_p) / total
 
-        overall_passed = avg_faithfulness >= settings.min_faithfulness_score
-
-        batch_result = BatchEvalResult(
+        batch_result = BatchEvaluationResult(
             run_id=run_id,
             total_cases=total,
-            passed_cases=passed_count,
-            failed_cases=failed_count,
-            avg_faithfulness=avg_faithfulness,
-            avg_answer_relevance=avg_relevance,
-            avg_context_precision=avg_precision,
-            passed=overall_passed,
-            individual_results=individual_results,
+            passed_cases=passed_cases,
+            failed_cases=failed_cases,
+            avg_faithfulness=avg_f,
+            avg_answer_relevance=avg_r,
+            avg_context_precision=avg_p,
+            passed=avg_f >= self.FAITHFULNESS_THRESHOLD,
         )
 
-        # ── Persist to DB ──────────────────────────────────────────
-        await self._save_eval_run(batch_result)
-
+        await _save_batch_eval_result(batch_result)
         log.info(
             "Batch evaluation complete",
-            passed=overall_passed,
-            avg_faithfulness=round(avg_faithfulness, 3),
-            passed_cases=passed_count,
-            failed_cases=failed_count,
+            total_cases=total,
+            passed_cases=passed_cases,
+            failed_cases=failed_cases,
+            avg_faithfulness=avg_f,
+            passed=batch_result.passed,
         )
-
         return batch_result
 
-    # ── Helpers ────────────────────────────────────────────────────
-    async def _load_golden_dataset(
-        self,
-        limit: Optional[int] = None,
-    ) -> list[dict]:
-        """Load active golden dataset entries from Postgres."""
+
+# ──────────────────────────────────────────────────────────────────
+# Persist evaluation result
+# ──────────────────────────────────────────────────────────────────
+async def _save_single_eval_result(
+    result: EvaluationResult,
+    session_id: Optional[str],
+) -> None:
+    """Store evaluation scores in eval_runs table (non-fatal)."""
+    try:
+        import uuid
+        from core.db import get_db_context
+        from core.models.db_models import EvalRun
+
+        async with get_db_context() as db:
+            run = EvalRun(
+                run_id=str(uuid.uuid4()),
+                faithfulness=result.faithfulness,
+                answer_relevance=result.answer_relevance,
+                context_precision=result.context_precision,
+                total_cases=1,
+                passed_cases=1 if result.passed else 0,
+                failed_cases=0 if result.passed else 1,
+                passed=result.passed,
+                metadata=result.details,
+            )
+            db.add(run)
+    except Exception as exc:
+        logger.error("Failed to save eval result", error=str(exc))
+
+
+async def _load_golden_dataset_entries(limit: int):
+    """Load active golden dataset rows for batch evaluation."""
+    try:
         from sqlalchemy import select
+        from core.db import get_db_context
         from core.models.db_models import GoldenDatasetEntry
 
         async with get_db_context() as db:
-            stmt = (
+            result = await db.execute(
                 select(GoldenDatasetEntry)
                 .where(GoldenDatasetEntry.is_active == True)
-                .order_by(GoldenDatasetEntry.created_at)
+                .order_by(GoldenDatasetEntry.created_at.desc())
+                .limit(limit)
             )
-            if limit:
-                stmt = stmt.limit(limit)
+            return list(result.scalars().all())
+    except Exception as exc:
+        logger.error("Failed to load golden dataset entries", error=str(exc))
+        return []
 
-            result = await db.execute(stmt)
-            entries = result.scalars().all()
 
-        return [
-            {
-                "question": e.question,
-                "reference_context": e.reference_context,
-                "expected_answer": e.expected_answer,
-            }
-            for e in entries
-        ]
-
-    async def _save_eval_run(self, result: BatchEvalResult) -> None:
-        """Persist batch evaluation results to the eval_runs table."""
+async def _save_batch_eval_result(result: BatchEvaluationResult) -> None:
+    """Persist one batch evaluation aggregate row to eval_runs."""
+    try:
+        from core.db import get_db_context
         from core.models.db_models import EvalRun
 
         async with get_db_context() as db:
@@ -407,11 +383,16 @@ class ComplianceAuditorAgent:
                 passed_cases=result.passed_cases,
                 failed_cases=result.failed_cases,
                 passed=result.passed,
+                metadata={
+                    "mode": "batch",
+                },
             )
             db.add(run)
+    except Exception as exc:
+        logger.error("Failed to save batch eval result", error=str(exc), run_id=result.run_id)
 
-        logger.info("Eval run persisted", run_id=result.run_id, passed=result.passed)
 
-
-# ── Module-level singleton ─────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────
+# Module-level singleton
+# ──────────────────────────────────────────────────────────────────
 compliance_auditor = ComplianceAuditorAgent()

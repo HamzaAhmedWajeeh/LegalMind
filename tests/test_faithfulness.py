@@ -18,7 +18,7 @@ CI/CD behaviour:
 
 Test strategy:
   - Unit tests use mocked DeepEval to avoid live API calls in CI.
-  - Integration tests (marked) use real DeepEval + Claude for full scoring.
+  - Integration tests (marked) use real DeepEval + Gemini for full scoring.
   - The threshold assertion is what actually gates the build.
 """
 
@@ -156,7 +156,7 @@ class TestComplianceAuditorUnit:
         """
         A response generated with no context should fail faithfulness.
         This catches cases where the retrieval layer returns no results
-        but Claude generates an answer anyway.
+        but Gemini generates an answer anyway.
         """
         with patch.object(auditor, '_score_metric', return_value=(0.0, "No context provided")):
             result = await auditor._evaluate_single(
@@ -305,7 +305,7 @@ class TestFaithfulnessGate:
 @pytest.mark.integration
 class TestFaithfulnessIntegration:
     """
-    Full end-to-end faithfulness tests using real DeepEval + Claude.
+    Full end-to-end faithfulness tests using real DeepEval + Gemini.
     Only runs when LEGALMIND_INTEGRATION_TESTS=true.
     """
 

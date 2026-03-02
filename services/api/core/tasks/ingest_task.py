@@ -183,15 +183,15 @@ async def _update_document_status(
 async def _embed_and_store(enriched_chunks, document_id: uuid.UUID) -> None:
     """
     Generate embeddings for all chunks and write to Qdrant + Postgres.
-    This function will be fully implemented in Step 3b (vector store writer)
-    once the retrieval layer (Step 4) sets up the Qdrant client.
-
-    For now it logs and writes chunk rows to Postgres only.
-    The Qdrant upsert will be added in Step 4 when we build vector_store.py.
     """
+    from core.retrieval.vector_store import vector_store
     from core.db import get_db_context
     from core.models.db_models import Chunk
 
+    # 1) Embed and upsert vectors so semantic retrieval has fresh points.
+    await vector_store.upsert_chunks(enriched_chunks)
+
+    # 2) Persist chunk rows/metadata in Postgres.
     async with get_db_context() as db:
         for ec in enriched_chunks:
             chunk_row = Chunk(
@@ -206,7 +206,7 @@ async def _embed_and_store(enriched_chunks, document_id: uuid.UUID) -> None:
             db.add(chunk_row)
 
     logger.info(
-        "Chunks written to Postgres",
+        "Chunks written to Qdrant and Postgres",
         document_id=str(document_id),
         count=len(enriched_chunks),
     )

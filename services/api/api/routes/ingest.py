@@ -2,16 +2,11 @@
 api/routes/ingest.py
 ====================
 Document ingestion endpoints.
-
-POST /ingest/upload  — Accept a file upload, create a Document row,
-                       dispatch a Celery task, return task_id immediately.
-GET  /ingest/status/{task_id} — Poll Celery task status.
-GET  /ingest/documents        — List all ingested documents with filters.
-DELETE /ingest/documents/{id} — Remove a document and its vectors.
 """
 
 import hashlib
 import uuid
+from datetime import date
 from typing import Optional
 
 import structlog
@@ -35,9 +30,25 @@ router = APIRouter(prefix="/ingest", tags=["Ingestion"])
 logger = structlog.get_logger(__name__)
 settings = get_settings()
 
-# Max file size: 50 MB
 _MAX_FILE_SIZE = 50 * 1024 * 1024
 _ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+
+
+def _parse_date(date_str: Optional[str]) -> Optional[date]:
+    """
+    Convert ISO date string '2024-03-15' to datetime.date.
+    asyncpg requires a real date object — passing a string raises DataError.
+    Returns None if date_str is None or empty.
+    """
+    if not date_str:
+        return None
+    try:
+        return date.fromisoformat(date_str)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid date format '{date_str}'. Expected ISO format: YYYY-MM-DD",
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -46,28 +57,16 @@ _ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 @router.post("/upload", response_model=IngestionTaskOut, status_code=202)
 async def upload_document(
     file: UploadFile = File(..., description="PDF, DOCX, or TXT file to ingest"),
-    doc_type: Optional[str] = Form(
-        default=None,
-        description="contract | case_file | brief | memo | other",
-    ),
+    doc_type: Optional[str] = Form(default=None),
     client_id: Optional[str] = Form(default=None),
     matter_id: Optional[str] = Form(default=None),
     date_filed: Optional[str] = Form(
         default=None,
         description="ISO date string e.g. 2024-03-15",
     ),
-    chunking_strategy: str = Form(
-        default="recursive",
-        description="recursive | semantic",
-    ),
+    chunking_strategy: str = Form(default="recursive"),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """
-    Upload a legal document for ingestion into LegalMind.
-
-    Returns a task_id immediately (HTTP 202 Accepted).
-    Poll GET /ingest/status/{task_id} for progress.
-    """
     # ── Validate file ──────────────────────────────────────────────
     filename = file.filename or "unnamed"
     suffix = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -107,6 +106,11 @@ async def upload_document(
             ),
         )
 
+    # ── Convert date string → datetime.date ───────────────────────
+    # asyncpg requires a real date object for DATE columns.
+    # Passing a plain string raises: 'str' object has no attribute 'toordinal'
+    parsed_date = _parse_date(date_filed)
+
     # ── Create Document row (status=pending) ───────────────────────
     doc_id = uuid.uuid4()
     document = Document(
@@ -116,11 +120,11 @@ async def upload_document(
         doc_type=doc_type,
         client_id=client_id,
         matter_id=matter_id,
-        date_filed=date_filed,
+        date_filed=parsed_date,   # datetime.date object, not a string
         status="pending",
     )
     db.add(document)
-    await db.flush()   # Write to DB before dispatching Celery task
+    await db.flush()
 
     # ── Dispatch Celery task ───────────────────────────────────────
     task = ingest_document_task.delay(
@@ -130,7 +134,7 @@ async def upload_document(
         doc_type=doc_type,
         client_id=client_id,
         matter_id=matter_id,
-        date_filed=date_filed,
+        date_filed=date_filed,       # Pass original string to Celery (serialisable)
         chunking_strategy=chunking_strategy,
     )
 
@@ -159,13 +163,11 @@ async def get_ingestion_status(
     task_id: str,
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Poll the status of an ingestion task by Celery task ID."""
     from celery.result import AsyncResult
     from core.tasks.celery_app import celery_app
 
     result = AsyncResult(task_id, app=celery_app)
 
-    # Map Celery states to our status vocabulary
     celery_to_status = {
         "PENDING":  "pending",
         "STARTED":  "processing",
@@ -176,13 +178,11 @@ async def get_ingestion_status(
     }
     status = celery_to_status.get(result.state, "pending")
 
-    # If the task succeeded, get the document_id from the result
     task_result = result.result if result.state == "SUCCESS" else {}
     document_id_str = (
         task_result.get("document_id") if isinstance(task_result, dict) else None
     )
 
-    # Fetch chunk count from DB if we have the document_id
     chunk_count = 0
     error_msg = None
     doc_uuid = None
@@ -223,8 +223,8 @@ async def list_documents(
     page_size: int = 20,
     db: AsyncSession = Depends(get_db_session),
 ):
-    """List all ingested documents with optional filters and pagination."""
     from sqlalchemy import func
+    import math
 
     stmt = select(Document)
 
@@ -235,18 +235,15 @@ async def list_documents(
     if status:
         stmt = stmt.where(Document.status == status)
 
-    # Count total
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total_result = await db.execute(count_stmt)
     total = total_result.scalar() or 0
 
-    # Paginate
     offset = (page - 1) * page_size
     stmt = stmt.order_by(Document.ingested_at.desc()).offset(offset).limit(page_size)
     result = await db.execute(stmt)
     documents = result.scalars().all()
 
-    import math
     return PaginatedResponse(
         items=[DocumentOut.model_validate(d) for d in documents],
         total=total,
@@ -264,35 +261,26 @@ async def delete_document(
     document_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_session),
 ):
-    """
-    Delete a document, its chunks from Postgres, and its vectors from Qdrant.
-    Also invalidates the semantic cache since responses may reference this doc.
-    """
-    # Verify document exists
     result = await db.execute(select(Document).where(Document.id == document_id))
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Delete vectors from Qdrant
     try:
         from core.retrieval.vector_store import vector_store
         await vector_store.delete_document_chunks(str(document_id))
     except Exception as exc:
         logger.warning("Qdrant deletion failed", error=str(exc))
 
-    # Delete chunks and document from Postgres
     await db.execute(delete(Chunk).where(Chunk.document_id == document_id))
     await db.execute(delete(Document).where(Document.id == document_id))
 
-    # Invalidate semantic cache
     try:
         from core.cache.semantic_cache import semantic_cache
         await semantic_cache.invalidate_all()
     except Exception as exc:
         logger.warning("Cache invalidation failed", error=str(exc))
 
-    # Rebuild BM25 index
     try:
         from core.retrieval.bm25 import bm25_retriever
         await bm25_retriever.invalidate()

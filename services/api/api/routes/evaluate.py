@@ -44,6 +44,18 @@ async def generate_golden_dataset(
         default=None,
         description="Number of QA pairs to generate (default from config)",
     ),
+    batch_size: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=20,
+        description="Questions generated per LLM call. Lower is usually faster per batch.",
+    ),
+    max_chunks_per_batch: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=12,
+        description="Chunks sent to LLM per call. Lower reduces prompt size and latency.",
+    ),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
@@ -55,7 +67,11 @@ async def generate_golden_dataset(
     from core.agents.adversarial_lawyer import adversarial_lawyer
 
     async def _run_generation():
-        count = await adversarial_lawyer.generate_dataset(target_size=target_size)
+        count = await adversarial_lawyer.generate_dataset(
+            target_size=target_size,
+            batch_size=batch_size,
+            max_chunks_per_batch=max_chunks_per_batch,
+        )
         logger.info("Golden dataset generation complete", count=count)
 
     background_tasks.add_task(_run_generation)
@@ -63,6 +79,8 @@ async def generate_golden_dataset(
     return {
         "message": "Adversarial Lawyer Agent started",
         "target_size": target_size,
+        "batch_size": batch_size,
+        "max_chunks_per_batch": max_chunks_per_batch,
         "status": "running in background",
         "check": "GET /evaluate/dataset to see results",
     }

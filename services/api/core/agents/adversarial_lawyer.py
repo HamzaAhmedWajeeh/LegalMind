@@ -17,7 +17,7 @@ How it works:
      (Postgres chunks table, status='indexed')
   2. Groups chunks by document so it can generate single-doc AND
      cross-document (multi-hop) questions
-  3. Calls Claude with a specialised "question generator" prompt
+  3. Calls Gemini with a specialised "question generator" prompt
      that instructs it to create adversarial, legally specific
      questions that require precise clause-level reasoning
   4. Parses the structured JSON response into GoldenDatasetEntry rows
@@ -35,7 +35,6 @@ import random
 import uuid
 from typing import Optional
 
-import anthropic
 import structlog
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -95,18 +94,24 @@ class AdversarialLawyerAgent:
     """
 
     def __init__(self):
-        self._client: Optional[anthropic.Anthropic] = None
+        self._client = None
 
-    def _get_client(self) -> anthropic.Anthropic:
+    def _get_client(self):
         if self._client is None:
-            self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+            import google.generativeai as genai
+
+            genai.configure(api_key=settings.gemini_api_key)
+            self._client = genai.GenerativeModel(
+                model_name=settings.gemini_model,
+                system_instruction=_ADVERSARIAL_LAWYER_SYSTEM_PROMPT,
+            )
         return self._client
 
     async def generate_dataset(
         self,
         target_size: Optional[int] = None,
-        batch_size: int = 10,
-        max_chunks_per_batch: int = 8,
+        batch_size: Optional[int] = None,
+        max_chunks_per_batch: Optional[int] = None,
     ) -> int:
         """
         Generate synthetic QA pairs and persist them to the golden_dataset table.
@@ -120,6 +125,8 @@ class AdversarialLawyerAgent:
             Number of QA pairs successfully generated and stored
         """
         target = target_size or settings.golden_dataset_size
+        batch_size = batch_size or settings.adversarial_batch_size
+        max_chunks_per_batch = max_chunks_per_batch or settings.adversarial_max_chunks_per_batch
         log = logger.bind(target_size=target, batch_size=batch_size)
         log.info("Adversarial Lawyer Agent starting")
 
@@ -180,12 +187,13 @@ class AdversarialLawyerAgent:
         n_questions: int,
     ) -> list[dict]:
         """
-        Call Claude to generate n_questions QA pairs from the given chunks.
+        Call Gemini to generate n_questions QA pairs from the given chunks.
 
         Returns:
-            List of raw QA pair dicts parsed from Claude's JSON response
+            List of raw QA pair dicts parsed from Gemini's JSON response
         """
         import asyncio
+        import google.generativeai as genai
 
         # Format chunks for the prompt
         chunks_text = "\n\n".join([
@@ -209,18 +217,22 @@ class AdversarialLawyerAgent:
 
         client = self._get_client()
         loop = asyncio.get_event_loop()
+        generation_config = genai.types.GenerationConfig(
+            max_output_tokens=settings.adversarial_max_output_tokens,
+            temperature=0.2,
+        )
 
         response = await loop.run_in_executor(
             None,
-            lambda: client.messages.create(
-                model=settings.anthropic_model,
-                max_tokens=4096,
-                system=_ADVERSARIAL_LAWYER_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_message}],
+            lambda: client.generate_content(
+                user_message,
+                generation_config=generation_config,
             )
         )
 
-        raw_text = response.content[0].text.strip()
+        raw_text = (response.text or "").strip()
+        if not raw_text:
+            raise ValueError("Empty response from Gemini in Adversarial Lawyer")
 
         # Strip markdown fences if present
         if raw_text.startswith("```"):

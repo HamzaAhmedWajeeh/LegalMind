@@ -54,7 +54,7 @@ def mock_settings(monkeypatch):
     Override settings for all tests — no real API keys required.
     Tests that need real keys must be marked @pytest.mark.integration.
     """
-    monkeypatch.setenv("ANTHROPIC_API_KEY",  "test-anthropic-key")
+    monkeypatch.setenv("GEMINI_API_KEY",  "test-gemini-key")
     monkeypatch.setenv("COHERE_API_KEY",     "test-cohere-key")
     monkeypatch.setenv("POSTGRES_URL",       "postgresql+asyncpg://test:test@localhost/test")
     monkeypatch.setenv("REDIS_URL",          "redis://localhost:6379/0")

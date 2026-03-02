@@ -4,12 +4,12 @@ core/generation/prompts.py
 System prompt engineering and context formatting for LegalMind.
 
 This module is responsible for two things:
-  1. Defining the SYSTEM PROMPT that governs Claude's behaviour —
+  1. Defining the SYSTEM PROMPT that governs Gemini's behaviour —
      mandating citations, enforcing "I don't know" fallbacks, and
      preventing hallucinations.
 
   2. Formatting the retrieved RankedChunks into a structured context
-     block that Claude can reliably parse and cite from.
+     block that Gemini can reliably parse and cite from.
 
 Why prompt engineering matters here:
   The spec explicitly requires:
@@ -95,10 +95,10 @@ Correct response (if context is insufficient):
 
 def format_context(chunks: list[RankedChunk]) -> str:
     """
-    Format reranked chunks into a structured context block for Claude.
+    Format reranked chunks into a structured context block for Gemini.
 
     The format is designed so that:
-    1. Claude can clearly identify which text belongs to which source.
+    1. Gemini can clearly identify which text belongs to which source.
     2. The citation format [SOURCE: filename | Chunk N] maps directly
        back to the chunk metadata for the Shepardizer agent to validate.
     3. Relevance scores are included for transparency (useful for debugging).
@@ -145,7 +145,7 @@ def build_user_message(query: str, chunks: list[RankedChunk]) -> str:
     Build the complete user message combining the context and the question.
 
     Keeping context and question in the user turn (rather than the system
-    prompt) follows Anthropic's recommended pattern for RAG — the system
+    prompt) follows a standard provider-agnostic pattern for RAG — the system
     prompt defines behaviour, the user message provides the data.
 
     Args:
@@ -153,7 +153,7 @@ def build_user_message(query: str, chunks: list[RankedChunk]) -> str:
         chunks : Reranked context chunks
 
     Returns:
-        Full user message string ready to send to Claude
+        Full user message string ready to send to Gemini
     """
     context_block = format_context(chunks)
 

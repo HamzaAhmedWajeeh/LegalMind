@@ -17,7 +17,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - COHERE_API_KEY=${COHERE_API_KEY}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
@@ -41,7 +41,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 30s
 
   # ----------------------------------------------------------
   # 2. Celery Worker — Async document ingestion pipeline
@@ -54,7 +55,7 @@ services:
     restart: unless-stopped
     command: celery -A core.tasks.celery_app worker --loglevel=info --concurrency=2
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - COHERE_API_KEY=${COHERE_API_KEY}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
@@ -100,17 +101,20 @@ services:
     container_name: legalmind_qdrant
     restart: unless-stopped
     ports:
-      - "6333:6333"   # HTTP API
-      - "6334:6334"   # gRPC
+      - "6333:6333"
+      - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     networks:
       - legalmind_net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 20s
+      # Qdrant's image has no curl or wget — use bash built-in TCP check
+      # bash /dev/tcp/host/port exits 0 if port open, 1 if not. No tools needed.
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' 2>/dev/null || exit 1"]
+      interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
 
   # ----------------------------------------------------------
   # 5. Redis — Semantic cache + Celery message broker
@@ -131,6 +135,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   # ----------------------------------------------------------
   # 6. PostgreSQL — Document metadata, audit logs, golden dataset
@@ -155,9 +160,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
 
 # ============================================================
-#  Named Volumes — Persist data across container restarts
+#  Named Volumes
 # ============================================================
 volumes:
   qdrant_data:
@@ -168,9 +174,8 @@ volumes:
     driver: local
 
 # ============================================================
-#  Networks — Isolated internal network
+#  Networks
 # ============================================================
 networks:
   legalmind_net:
     driver: bridge
-  

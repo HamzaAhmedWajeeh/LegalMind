@@ -23,7 +23,7 @@ A production-grade Retrieval-Augmented Generation (RAG) system for querying 10,0
        │                    │
 ┌──────▼──────┐    ┌─────────▼──────────────────────────────-─┐
 │   Celery    │    │           RAG Pipeline                    │
-│   Worker    │    │  Query → Cache → Hybrid → Rerank → Claude │
+│   Worker    │    │  Query → Cache → Hybrid → Rerank → Gemini │
 └──────┬──────┘    └──────┬───────────────────┬────────────-───┘
        │                  │                   │
 ┌──────▼──────┐    ┌──────▼──────┐    ┌───────▼──────┐
@@ -67,7 +67,7 @@ A production-grade Retrieval-Augmented Generation (RAG) system for querying 10,0
 
 | Component | Technology | Why |
 |-----------|-----------|-----|
-| LLM | Anthropic Claude (claude-sonnet-4-20250514) | Best-in-class reasoning, long context |
+| LLM | Google Gemini | Strong reasoning and long context |
 | Embeddings | sentence-transformers/all-mpnet-base-v2 | 768-dim, local, no API cost |
 | Vector DB | Qdrant | HNSW index, payload filtering, async |
 | Keyword Search | rank-bm25 | Exact legal term matching |
@@ -86,7 +86,7 @@ A production-grade Retrieval-Augmented Generation (RAG) system for querying 10,0
 
 ### Prerequisites
 - Docker + Docker Compose v2
-- API keys: Anthropic, Cohere, DeepEval
+- API keys: Gemini, Cohere, DeepEval
 
 ### 1. Clone and configure
 
@@ -95,7 +95,7 @@ git clone <your-repo>
 cd legalmind
 cp .env.example .env
 # Add your API keys to .env:
-#   ANTHROPIC_API_KEY=sk-ant-...
+#   GEMINI_API_KEY=...
 #   COHERE_API_KEY=...
 #   DEEPEVAL_API_KEY=...
 ```
@@ -205,7 +205,7 @@ User Query
     │
     ▼  4. Cohere Cross-Encoder Reranking → top-5
     │
-    ▼  5. Claude Generation
+    ▼  5. Gemini Generation
     │     System prompt mandates [SOURCE: file | Chunk N] citations
     │     "I don't know" fallback when context is insufficient
     │
@@ -279,11 +279,11 @@ Set in **Settings → Secrets and variables → Actions**:
 
 | Secret | Description |
 |--------|-------------|
-| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `GEMINI_API_KEY` | Google Gemini API key |
 | `COHERE_API_KEY` | Cohere API key |
 | `DEEPEVAL_API_KEY` | DeepEval API key |
 
 ---
 
 *Built for the Capgemini GenAI Developer Assessment.*  
-*Stack: Claude · Qdrant · Cohere · Redis · PostgreSQL · DeepEval · FastAPI · Streamlit*
+*Stack: Gemini · Qdrant · Cohere · Redis · PostgreSQL · DeepEval · FastAPI · Streamlit*

@@ -1,17 +1,9 @@
 """
 core/agents/registry.py
 ========================
-Agent Registry — bootstraps all agents at application startup.
+Agent registry — wires agents into the RAGService observer hooks.
 
-This module is imported once in main.py during the lifespan startup.
-It registers the Compliance Auditor as a post-generation Observer
-on RAGService, so evaluation hooks fire automatically after every query.
-
-Design Pattern: Registry + Observer wiring
-  Centralising agent registration here means:
-  - main.py stays clean (one import, one call)
-  - Adding a new agent only requires adding it here
-  - RAGService and agents remain fully decoupled
+Called once at startup from main.py lifespan.
 """
 
 import structlog
@@ -21,17 +13,27 @@ logger = structlog.get_logger(__name__)
 
 def register_all_agents() -> None:
     """
-    Initialise and register all agents.
-    Called once during FastAPI application startup.
+    Register all post-generation observer hooks on the RAGService singleton.
+
+    Each hook receives (request, response, ranked_chunks) from rag_service.
+    We wrap evaluate_response to adapt signatures cleanly.
     """
     from core.generation.rag_service import rag_service
     from core.agents.compliance_auditor import compliance_auditor
 
-    # Register Compliance Auditor as a post-generation observer
-    # It will fire automatically after every non-cached RAG response
-    rag_service.register_hook(compliance_auditor.evaluate_response)
+    async def compliance_hook(request, response, ranked_chunks) -> None:
+        """
+        Adapter: translates RAGService hook signature →
+        ComplianceAuditorAgent.evaluate_response signature.
+        """
+        context_chunks = [chunk.text for chunk in ranked_chunks]
+        await compliance_auditor.evaluate_response(
+            query=request.query,
+            response=response.answer,
+            context_chunks=context_chunks,
+            session_id=request.session_id,
+        )
 
-    logger.info(
-        "All agents registered",
-        hooks=["compliance_auditor.evaluate_response"],
-    )
+    compliance_hook.__name__ = "compliance_hook"
+    rag_service.register_hook(compliance_hook)
+    logger.info("Compliance auditor registered as observer")
