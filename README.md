@@ -4,6 +4,8 @@
 
 A production-grade Retrieval-Augmented Generation (RAG) system for querying 10,000+ legal documents with high factual accuracy, mandatory source citations, and zero hallucinations.
 
+> **Model:** `gemini-2.0-flash-preview` (Google Gemini) — used for both answer generation and golden dataset synthesis.
+
 ---
 
 ## Architecture Overview
@@ -19,12 +21,12 @@ A production-grade Retrieval-Augmented Generation (RAG) system for querying 10,0
 │  POST /api/v1/query        →  RAGService Facade             │
 │  POST /api/v1/ingest/upload →  Celery Task (async)          │
 │  POST /api/v1/evaluate/run  →  ComplianceAuditor Agent      │
-└──────┬────────────────────┬────────────────────────────────-─┘
+└──────┬────────────────────┬─────────────────────────────────-┘
        │                    │
-┌──────▼──────┐    ┌─────────▼──────────────────────────────-─┐
+┌──────▼──────┐    ┌─────────▼─────────────────────────────-──┐
 │   Celery    │    │           RAG Pipeline                    │
 │   Worker    │    │  Query → Cache → Hybrid → Rerank → Gemini │
-└──────┬──────┘    └──────┬───────────────────┬────────────-───┘
+└──────┬──────┘    └──────┬───────────────────┬───────────-────┘
        │                  │                   │
 ┌──────▼──────┐    ┌──────▼──────┐    ┌───────▼──────┐
 │   Qdrant    │    │    Redis    │    │  PostgreSQL   │
@@ -67,17 +69,17 @@ A production-grade Retrieval-Augmented Generation (RAG) system for querying 10,0
 
 | Component | Technology | Why |
 |-----------|-----------|-----|
-| LLM | Google Gemini | Strong reasoning and long context |
-| Embeddings | sentence-transformers/all-mpnet-base-v2 | 768-dim, local, no API cost |
-| Vector DB | Qdrant | HNSW index, payload filtering, async |
-| Keyword Search | rank-bm25 | Exact legal term matching |
-| Reranker | Cohere Rerank v3 | Cross-encoder, top-20 → top-5 |
+| LLM | Google Gemini (`gemini-2.0-flash-preview`) | Strong reasoning, long context, fast inference |
+| Embeddings | sentence-transformers/all-mpnet-base-v2 | 768-dim, runs locally, no API cost per embed |
+| Vector DB | Qdrant | HNSW index, payload filtering, async client |
+| Keyword Search | rank-bm25 | Exact legal term matching, no API required |
+| Reranker | Cohere Rerank v3 | Cross-encoder, top-20 → top-5 precision |
 | Cache | Redis | Semantic similarity cache (cosine ≥ 0.92) |
-| Task Queue | Celery + Redis | Async ingestion |
+| Task Queue | Celery + Redis | Async ingestion, retry with back-off |
 | PDF Extraction | pdfplumber + pytesseract | Structured + OCR fallback |
-| Evaluation | DeepEval | Faithfulness, Relevance, Precision |
+| Evaluation | DeepEval | Faithfulness, Relevance, Context Precision |
 | API | FastAPI + Pydantic v2 | Async, type-safe, auto-docs |
-| UI | Streamlit | Demo-ready frontend |
+| UI | Streamlit | Demo-ready three-tab frontend |
 | CI/CD | GitHub Actions | Faithfulness gate on every PR |
 
 ---
@@ -107,6 +109,11 @@ docker compose up --build
 ```
 
 First run takes ~3 minutes to pull images and build. All 6 services start with health checks.
+Wait for this log line before uploading documents:
+
+```
+Embedding model ready — startup complete
+```
 
 ### 3. Ingest sample documents
 
@@ -120,6 +127,8 @@ curl -X POST http://localhost:8000/api/v1/ingest/upload \
   -F "doc_type=contract" \
   -F "client_id=APEX-001"
 ```
+
+Wait for all documents to reach **🟢 indexed** status before querying.
 
 ### 4. Ask a legal question
 
@@ -198,22 +207,55 @@ User Query
     ▼  1. Semantic cache check (Redis, cosine ≥ 0.92) → instant if hit
     │
     ▼  2. Hybrid Retrieval (parallel)
-    │     ├── Vector Search (Qdrant, top-20)
+    │     ├── Vector Search (Qdrant HNSW, top-20)
     │     └── BM25 Keyword Search (top-20)
     │
     ▼  3. Reciprocal Rank Fusion → fused top-20
     │
     ▼  4. Cohere Cross-Encoder Reranking → top-5
     │
-    ▼  5. Gemini Generation
+    ▼  5. Gemini Generation (gemini-2.0-flash-preview)
     │     System prompt mandates [SOURCE: file | Chunk N] citations
     │     "I don't know" fallback when context is insufficient
     │
-    ▼  6. Shepardizer Citation Validation
-    │     Context check → Database check → Relevance check
+    ▼  6. Response returned to user immediately
     │
-    ▼  7. Compliance Auditor (async Observer)
-          DeepEval faithfulness scoring
+    ▼  7. Background tasks (asyncio.create_task — non-blocking)
+          ├── Shepardizer: Context → Database → Relevance citation checks
+          └── Compliance Auditor: DeepEval faithfulness scoring
+```
+
+> **Note on response latency:** The Shepardizer and Compliance Auditor run as background
+> `asyncio` tasks and do **not** block the HTTP response. The user receives the answer
+> as soon as Gemini finishes (~10-12 seconds). Audit results appear in the evaluation
+> dashboard shortly after.
+
+---
+
+## Ingestion Pipeline
+
+```
+Uploaded File
+    │
+    ▼  1. Document row inserted to Postgres (status: pending)
+    │
+    ▼  2. Celery task dispatched to worker
+    │     Worker polls until document row is visible (race condition fix)
+    │
+    ▼  3. Parse  — pdfplumber / docx / plain text + OCR fallback
+    │
+    ▼  4. Chunk  — Recursive or Semantic strategy (configurable)
+    │
+    ▼  5. Enrich — Attach metadata (doc_type, client_id, filename, etc.)
+    │
+    ▼  6. Embed  — sentence-transformers/all-mpnet-base-v2 (local, 768-dim)
+    │
+    ▼  7. Store  — Qdrant upsert (with text in payload) + Postgres chunk rows
+    │              Collection auto-created if missing (restart-safe)
+    │
+    ▼  8. BM25 index rebuilt
+    │
+    ▼  9. Document status → indexed
 ```
 
 ---
@@ -221,13 +263,13 @@ User Query
 ## The 3 Agents
 
 ### 🤖 Adversarial Lawyer Agent
-Generates synthetic multi-hop QA pairs for benchmarking. Samples chunks cross-document to create single-hop, multi-hop, and edge-case questions. Stores to `golden_dataset` table.
+Generates synthetic multi-hop QA pairs for benchmarking. Samples chunks cross-document to create single-hop, multi-hop, and edge-case questions. Stores to `golden_dataset` table. Uses truncation-safe JSON parsing to recover partial results if Gemini hits output limits.
 
 ### 🔍 Compliance Auditor Agent
-DeepEval-powered faithfulness evaluator. In online mode, registered as Observer — scores every live response. In batch mode, runs the full golden dataset for CI/CD reporting.
+DeepEval-powered faithfulness evaluator. Registered as an Observer — scores every live response asynchronously in the background. In batch mode, runs the full golden dataset for CI/CD reporting.
 
 ### ⚖️ Shepardizer Agent
-Named after the legal practice of "Shepardizing" citations. Uses Chain of Responsibility: Context → Database → Relevance. Flags fabricated citations and attaches a health badge to every response.
+Named after the legal practice of "Shepardizing" citations. Uses Chain of Responsibility: Context → Database → Relevance. Flags fabricated citations and attaches a health badge to every response. Runs in the background and does not block the response to the user.
 
 ---
 
@@ -273,6 +315,18 @@ Interactive docs: `http://localhost:8000/docs`
 
 ---
 
+## Known Bugs Fixed
+
+| Bug | Root Cause | Fix |
+|-----|-----------|-----|
+| All documents fail ingestion | FK violation: Celery worker arrived before API committed document INSERT | Added `_wait_for_document()` polling loop in `ingest_task.py` |
+| Chunks stored but text not retrievable | `ec.payload` dict never included `text` field; Qdrant stored vectors with empty payloads | Added `{**ec.payload, "text": ec.text}` in `vector_store.upsert_chunks()` |
+| Ingestion fails after `docker compose down -v` | Worker's Qdrant client cached collection existence; collection deleted with volumes but worker didn't recreate it | `_ensure_collection()` now called on every `upsert_chunks()` call |
+| Query response takes 3+ minutes | Shepardizer and Compliance Auditor `await`ed inline, blocking HTTP response | Moved all observer hooks to `asyncio.create_task()` in `rag_service.py` |
+| Golden dataset generation always returns 0 | `max_output_tokens=1536` too low for 5 QA pairs with full reference contexts; Gemini truncated mid-JSON | Raised to 4096; added truncation-safe `_safe_parse_json_array()` that salvages complete pairs before truncation point |
+
+---
+
 ## GitHub Secrets Required
 
 Set in **Settings → Secrets and variables → Actions**:
@@ -286,4 +340,4 @@ Set in **Settings → Secrets and variables → Actions**:
 ---
 
 *Built for the Capgemini GenAI Developer Assessment.*  
-*Stack: Gemini · Qdrant · Cohere · Redis · PostgreSQL · DeepEval · FastAPI · Streamlit*
+*Stack: Gemini 2.0 Flash · Qdrant · Cohere Rerank v3 · Redis · PostgreSQL · DeepEval · FastAPI · Streamlit*
