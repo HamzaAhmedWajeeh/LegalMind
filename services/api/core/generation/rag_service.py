@@ -2,6 +2,20 @@
 core/generation/rag_service.py
 ==============================
 RAGService — the central Facade for the entire query pipeline.
+
+Design Pattern: FACADE PATTERN
+───────────────────────────────
+This class is the single entry point for answering a legal query.
+It hides the full complexity of:
+  1. Cache lookup       (Redis semantic cache)
+  2. Hybrid retrieval   (vector + BM25 → RRF)
+  3. Reranking          (Cohere cross-encoder)
+  4. Generation         (Gemini with citations)
+  5. Cache population   (store result for future similar queries)
+
+The Observer Pattern is also applied here via evaluation hooks —
+after each generation, registered observers (e.g., the Compliance
+Auditor agent) can inspect the result without modifying this class.
 """
 
 import time
@@ -22,8 +36,8 @@ from api.models.schemas import (
 logger = structlog.get_logger(__name__)
 settings = get_settings()
 
-# Updated: hook now receives ranked_chunks so the compliance auditor
-# can extract context_chunks without needing a separate argument.
+# Hook receives (request, response, ranked_chunks) so the compliance
+# auditor can extract context_chunks without a separate argument.
 ObserverHook = Callable[[QueryRequest, QueryResponse, list[RankedChunk]], Awaitable[None]]
 
 
@@ -40,6 +54,10 @@ class RAGService:
         self._post_generation_hooks: list[ObserverHook] = []
 
     def register_hook(self, hook: ObserverHook) -> None:
+        """
+        Register a post-generation observer hook.
+        Hook signature: async (QueryRequest, QueryResponse, list[RankedChunk]) -> None
+        """
         self._post_generation_hooks.append(hook)
         logger.info("Observer hook registered", hook=hook.__name__)
 
@@ -48,6 +66,18 @@ class RAGService:
         request: QueryRequest,
         cache_enabled: bool = True,
     ) -> QueryResponse:
+        """
+        Execute the full RAG pipeline for a legal query.
+
+        Pipeline:
+          1. Check semantic cache → return cached response if hit
+          2. Hybrid retrieval (vector + BM25 → RRF fusion)
+          3. Cohere reranking (top-20 → top-5)
+          4. Gemini generation with mandatory citations
+          5. Populate semantic cache with result
+          6. Fire post-generation observer hooks
+          7. Return QueryResponse
+        """
         start = time.monotonic()
         log = logger.bind(
             query_preview=request.query[:60],
@@ -121,16 +151,27 @@ class RAGService:
         if cache_enabled:
             await self._populate_cache(request.query, response)
 
-        # ── Stage 7: Fire observer hooks (pass ranked_chunks) ──────
-        for hook in self._post_generation_hooks:
+        # ── Stage 7: Fire observer hooks as background tasks ───────
+        # Hooks (Compliance Auditor, Shepardizer) must NEVER block the
+        # HTTP response. asyncio.create_task() schedules them on the
+        # event loop immediately — response is sent to the user while
+        # agents run in the background.
+        import asyncio as _asyncio
+
+        async def _safe_hook(hook, req, resp, chunks):
             try:
-                await hook(request, response, ranked_chunks)
+                await hook(req, resp, chunks)
             except Exception as exc:
                 logger.error(
                     "Observer hook failed",
                     hook=hook.__name__,
                     error=str(exc),
                 )
+
+        for hook in self._post_generation_hooks:
+            _asyncio.create_task(
+                _safe_hook(hook, request, response, ranked_chunks)
+            )
 
         log.info(
             "RAG pipeline complete",
@@ -141,6 +182,7 @@ class RAGService:
 
         return response
 
+    # ── Cache helpers ──────────────────────────────────────────────
     async def _check_cache(self, query: str) -> Optional[QueryResponse]:
         try:
             from core.cache.semantic_cache import semantic_cache
@@ -171,7 +213,11 @@ class RAGService:
         )
 
 
+# ──────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────
 def _to_source_chunks(cited_sources) -> list[SourceChunk]:
+    """Convert CitedSource dataclasses to Pydantic SourceChunk schemas."""
     import uuid as _uuid
     result = []
     for src in cited_sources:
@@ -192,4 +238,7 @@ def _to_source_chunks(cited_sources) -> list[SourceChunk]:
     return result
 
 
+# ──────────────────────────────────────────────────────────────────
+# Module-level singleton
+# ──────────────────────────────────────────────────────────────────
 rag_service = RAGService()

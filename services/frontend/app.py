@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Optional
 import httpx
 import streamlit as st
+
 st.set_page_config(
     page_title="LegalMind",
     page_icon="⚖️",
@@ -17,8 +18,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 API_BASE = "http://api:8000/api/v1"
-# Increased to 300s — Gemini 2.5 Pro + embedding model cold start can take ~2min
+
 TIMEOUT  = httpx.Timeout(3000.0)
+
 def api_get(path: str, params: dict = None) -> Optional[dict]:
     try:
         r = httpx.get(f"{API_BASE}{path}", params=params, timeout=TIMEOUT)
@@ -27,6 +29,7 @@ def api_get(path: str, params: dict = None) -> Optional[dict]:
     except Exception as e:
         st.error(f"API error: {e}")
         return None
+    
 def api_post(path: str, json: dict = None, files=None, data=None) -> Optional[dict]:
     try:
         r = httpx.post(f"{API_BASE}{path}", json=json, files=files, data=data, timeout=TIMEOUT)
@@ -38,6 +41,7 @@ def api_post(path: str, json: dict = None, files=None, data=None) -> Optional[di
     except Exception as e:
         st.error(f"Connection error: {e}")
         return None
+    
 def api_delete(path: str) -> bool:
     try:
         r = httpx.delete(f"{API_BASE}{path}", timeout=TIMEOUT)
@@ -45,7 +49,9 @@ def api_delete(path: str) -> bool:
     except Exception as e:
         st.error(f"Delete error: {e}")
         return False
+    
 # ── Sidebar ────────────────────────────────────────────────────────
+
 with st.sidebar:
     st.title("⚖️ LegalMind")
     st.caption("AI-Powered Legal Research Assistant")
@@ -67,16 +73,21 @@ with st.sidebar:
     st.divider()
     st.caption("Built for Capgemini GenAI Assessment")
     st.caption("Stack: Gemini · Qdrant · Redis · PostgreSQL")
+
 # ── Tabs ───────────────────────────────────────────────────────────
+
 tab_query, tab_docs, tab_eval = st.tabs([
     "⚖️ Legal Query", "📄 Documents", "🧪 Evaluation"
 ])
+
 # ══════════════════════════════════════════════════════════════════
 # TAB 1: Legal Query
 # ══════════════════════════════════════════════════════════════════
+
 with tab_query:
     st.header("⚖️ Legal Research Query")
     st.caption("Ask questions grounded in your indexed legal documents. Every answer includes mandatory source citations.")
+
     with st.expander("🔍 Metadata Filters (optional)", expanded=False):
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -85,8 +96,10 @@ with tab_query:
             filter_doc_type = st.selectbox("Document Type", ["(all)", "contract", "case_file", "brief", "memo", "other"])
         with col3:
             filter_date_from = st.date_input("Filed After", value=None)
+
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"], avatar="👤" if msg["role"] == "user" else "⚖️"):
             st.markdown(msg["content"])
@@ -99,12 +112,14 @@ with tab_query:
                         )
                         st.caption(src["text"][:400] + ("..." if len(src["text"]) > 400 else ""))
                         st.divider()
+
             if msg.get("meta"):
                 m = msg["meta"]
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Latency", f"{m.get('latency_ms',0)}ms")
                 c2.metric("Sources", len(msg.get("sources", [])))
                 c3.metric("Cache Hit", "✅" if m.get("cache_hit") else "❌")
+
     query = st.chat_input("Ask a legal question about your documents...")
     if query:
         st.session_state.chat_history.append({"role": "user", "content": query})
@@ -145,16 +160,20 @@ with tab_query:
                 })
             else:
                 st.error("Failed to get a response.")
+
     if st.session_state.chat_history:
         if st.button("🗑️ Clear Chat"):
             st.session_state.chat_history = []
             st.rerun()
+
 # ══════════════════════════════════════════════════════════════════
 # TAB 2: Document Management
 # ══════════════════════════════════════════════════════════════════
+
 with tab_docs:
     st.header("📄 Document Management")
     st.subheader("Upload New Document")
+
     with st.form("upload_form", clear_on_submit=True):
         uploaded_file = st.file_uploader("Choose a legal document", type=["pdf", "docx", "txt"])
         col1, col2, col3 = st.columns(3)
@@ -168,6 +187,7 @@ with tab_docs:
             chunking = st.radio("Chunking Strategy", ["recursive", "semantic"],
                                 help="Recursive: fast. Semantic: clause-aware.")
         submitted = st.form_submit_button("📤 Upload & Ingest", type="primary")
+
     if submitted and uploaded_file:
         with st.spinner(f"Uploading {uploaded_file.name}..."):
             files     = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
@@ -176,27 +196,35 @@ with tab_docs:
             if matter_id:  form_data["matter_id"]   = matter_id
             if date_filed: form_data["date_filed"]  = date_filed.isoformat()
             result = api_post("/ingest/upload", files=files, data=form_data)
+
         if result:
             st.success(f"✅ Accepted! Task ID: `{result['task_id']}`")
             st.session_state.last_task_id = result["task_id"]
+
     if "last_task_id" in st.session_state:
         s = api_get(f"/ingest/status/{st.session_state.last_task_id}")
         if s:
             icon = {"indexed":"🟢","processing":"🟡","pending":"🔵","failed":"🔴"}.get(s.get("status",""), "⚪")
             st.write(f"**Last task:** {icon} `{s.get('status')}` — {s.get('chunk_count',0)} chunks")
+
     st.divider()
     st.subheader("Indexed Documents")
+
     c1, c2, c3 = st.columns([1,2,2])
+
     with c1:
         if st.button("🔄 Refresh"): st.rerun()
     with c2:
         list_type = st.selectbox("Filter type", ["(all)","contract","case_file","brief","memo"], key="lt")
     with c3:
         list_client = st.text_input("Filter client", key="lc")
+
     params = {"page_size": 50}
     if list_type != "(all)": params["doc_type"]   = list_type
     if list_client:          params["client_id"]  = list_client
+
     docs_data = api_get("/ingest/documents", params=params)
+
     if docs_data and docs_data.get("items"):
         st.caption(f"Showing {len(docs_data['items'])} of {docs_data['total']} documents")
         for doc in docs_data["items"]:
@@ -214,9 +242,11 @@ with tab_docs:
                         st.success("Deleted"); st.rerun()
     else:
         st.info("No documents yet. Upload one above to get started.")
+
 # ══════════════════════════════════════════════════════════════════
 # TAB 3: Evaluation Dashboard
 # ══════════════════════════════════════════════════════════════════
+
 with tab_eval:
     st.header("🧪 Evaluation Dashboard")
     st.caption("RAG quality monitoring via DeepEval. Faithfulness ≥ 0.90 required to pass CI/CD gate.")

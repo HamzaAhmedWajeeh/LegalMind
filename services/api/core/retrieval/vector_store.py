@@ -179,6 +179,13 @@ class QdrantVectorStore:
         per batch rather than one per chunk.
         """
         client = await self._get_client()
+        # Re-check collection exists on every upsert.
+        # The worker process caches the client across requests, so if Qdrant
+        # data was wiped (docker compose down -v) while the worker was running,
+        # the collection disappears but _get_client() won't re-create it because
+        # self._client is already set. Calling _ensure_collection() here is
+        # idempotent (it checks first) and costs one GET /collections per upsert.
+        await self._ensure_collection()
 
         if not enriched_chunks:
             return
@@ -190,7 +197,7 @@ class QdrantVectorStore:
             models.PointStruct(
                 id=ec.qdrant_id,
                 vector=embedding,
-                payload=ec.payload,
+                payload={**ec.payload, "text": ec.text},  # text MUST be in payload for retrieval
             )
             for ec, embedding in zip(enriched_chunks, embeddings)
         ]

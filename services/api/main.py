@@ -2,15 +2,9 @@
 main.py
 =======
 LegalMind API — Application Entry Point.
-
-Wires together:
-- FastAPI app with lifespan (startup/shutdown hooks)
-- CORS middleware
-- Structured logging
-- Database connection pool lifecycle
-- Route registration (added incrementally in later steps)
 """
 
+import asyncio
 import time
 from contextlib import asynccontextmanager
 
@@ -46,11 +40,6 @@ settings = get_settings()
 # ------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Runs once at startup and once at shutdown.
-    Replaces the deprecated @app.on_event("startup") pattern.
-    """
-    # STARTUP
     logger.info(
         "LegalMind API starting",
         environment=settings.environment,
@@ -66,7 +55,26 @@ async def lifespan(app: FastAPI):
     # Build BM25 index from any already-indexed documents
     from core.retrieval.bm25 import bm25_retriever
     await bm25_retriever.build_index()
-    logger.info("BM25 index built — startup complete")
+    logger.info("BM25 index built")
+
+    # ------------------------------------------------------------------
+    # Pre-warm embedding model — eliminates 60s cold start on first query
+    # Runs in thread pool so it doesn't block the event loop or health checks
+    # ------------------------------------------------------------------
+    async def _prewarm_embeddings():
+        try:
+            logger.info("Pre-warming embedding model...")
+            from core.retrieval.vector_store import vector_store
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: vector_store._get_embedding_model().encode(["warmup"])
+            )
+            logger.info("Embedding model ready — startup complete")
+        except Exception as exc:
+            logger.warning("Embedding pre-warm failed (non-fatal)", error=str(exc))
+
+    asyncio.create_task(_prewarm_embeddings())
 
     yield  # Application runs here
 
@@ -149,7 +157,6 @@ app.include_router(evaluate_router, prefix="/api/v1")
 # ------------------------------------------------------------------
 @app.get("/health", tags=["System"])
 async def health_check():
-    """Health check endpoint used by Docker and load balancers."""
     return {
         "status": "ok",
         "service": "legalmind-api",

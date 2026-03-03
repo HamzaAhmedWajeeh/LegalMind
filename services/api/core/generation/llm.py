@@ -3,9 +3,6 @@ core/generation/llm.py
 ======================
 Google Gemini client — the generation layer of the RAG pipeline.
 
-Uses Google Gemini 2.5 Pro.
-All other behaviour (citation parsing, audit logging, retry) unchanged.
-
 Design Pattern: Facade Pattern
 """
 

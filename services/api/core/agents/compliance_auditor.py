@@ -3,9 +3,8 @@ core/agents/compliance_auditor.py
 ===================================
 Compliance Auditor Agent — RAG Triad evaluation using DeepEval.
 
-Uses Google Gemini 2.5 Pro as the judge LLM.
-Uses a custom DeepEvalBaseLLM wrapper since deepeval 0.21.x predates
-the official Gemini integration.
+Uses Google Gemini as the judge LLM.
+Uses a custom DeepEvalBaseLLM wrapper.
 
 Design Pattern: Observer Pattern
   The RAGService notifies this agent after every generation.
@@ -38,11 +37,6 @@ settings = get_settings()
 # Custom Gemini judge for DeepEval
 # ──────────────────────────────────────────────────────────────────
 class GeminiJudge(DeepEvalBaseLLM):
-    """
-    Wraps Google Gemini for use as DeepEval's judge LLM.
-    DeepEval calls generate() / a_generate() to score responses.
-    """
-
     def __init__(self):
         self._model = None
 
@@ -50,32 +44,25 @@ class GeminiJudge(DeepEvalBaseLLM):
         if self._model is None:
             import google.generativeai as genai
             genai.configure(api_key=settings.gemini_api_key)
-            self._model = genai.GenerativeModel(
-                model_name=settings.gemini_model,
-            )
+            self._model = genai.GenerativeModel(model_name=settings.gemini_model)
         return self._model
 
     def load_model(self):
-        """Required by DeepEvalBaseLLM."""
         return self._get_model()
 
     def get_model_name(self) -> str:
         return settings.gemini_model
 
     def generate(self, prompt: str) -> str:
-        """Synchronous generate — called by DeepEval internals."""
-        model = self._get_model()
-        response = model.generate_content(prompt)
-        return response.text
+        return self._get_model().generate_content(prompt).text
 
     async def a_generate(self, prompt: str) -> str:
-        """Async generate — runs sync client in thread pool."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.generate, prompt)
 
 
 # ──────────────────────────────────────────────────────────────────
-# Evaluation result dataclass
+# Evaluation result dataclasses
 # ──────────────────────────────────────────────────────────────────
 @dataclass
 class EvaluationResult:
@@ -100,7 +87,6 @@ class BatchEvaluationResult:
 
 @dataclass
 class SingleEvalResult:
-    """Backwards-compatible single-case result used by existing tests."""
     faithfulness: float
     answer_relevance: float
     context_precision: float
@@ -114,12 +100,11 @@ class SingleEvalResult:
 class ComplianceAuditorAgent:
     """
     Evaluates RAG responses using the RAG Triad metrics via DeepEval.
-    Uses Gemini 2.5 Pro as the judge LLM.
 
     Metrics:
-      - Faithfulness       ≥ 0.9  (CI/CD gate)
-      - Answer Relevance   ≥ 0.7
-      - Context Precision  ≥ 0.7
+      - Faithfulness       >= 0.9  (CI/CD gate) — no expected_output needed
+      - Answer Relevance   >= 0.7  — no expected_output needed
+      - Context Precision  >= 0.7  — requires expected_output (batch mode only)
     """
 
     FAITHFULNESS_THRESHOLD = 0.9
@@ -128,7 +113,6 @@ class ComplianceAuditorAgent:
 
     def __init__(self):
         self._judge = None
-        # Backward compatibility for older unit tests that assert lazy-init fields.
         self._faithfulness_metric = None
         self._relevance_metric = None
         self._precision_metric = None
@@ -166,7 +150,6 @@ class ComplianceAuditorAgent:
         return self._precision_metric
 
     async def _score_metric(self, metric, test_case: LLMTestCase) -> tuple[float, str]:
-        """Measure one DeepEval metric and return (score, reason)."""
         loop = asyncio.get_event_loop()
 
         def _measure():
@@ -180,27 +163,37 @@ class ComplianceAuditorAgent:
         question: str,
         answer: str,
         context: list[str],
+        expected_output: Optional[str] = None,  # Required by ContextualPrecision
     ) -> SingleEvalResult:
-        """Backwards-compatible single-case evaluator used by tests and wrappers."""
+        """
+        Evaluate one QA pair.
+
+        expected_output is optional:
+          - Provided in batch mode (from golden dataset expected_answer)
+          - None in online mode (observer hook after live queries)
+          - ContextualPrecisionMetric is skipped when None to avoid crash
+        """
         test_case = LLMTestCase(
             input=question,
             actual_output=answer,
             retrieval_context=context,
+            expected_output=expected_output,  # None is fine for Faith + Relevance
         )
-
-        faithfulness_metric = self._get_faithfulness_metric()
-        relevance_metric = self._get_relevance_metric()
-        precision_metric = self._get_precision_metric()
 
         faithfulness_score, faithfulness_reason = await self._score_metric(
-            faithfulness_metric, test_case
+            self._get_faithfulness_metric(), test_case
         )
-        relevance_score, relevance_reason = await self._score_metric(
-            relevance_metric, test_case
+        relevance_score, _ = await self._score_metric(
+            self._get_relevance_metric(), test_case
         )
-        precision_score, precision_reason = await self._score_metric(
-            precision_metric, test_case
-        )
+
+        # ContextualPrecision requires expected_output — skip if not provided
+        if expected_output is not None:
+            precision_score, _ = await self._score_metric(
+                self._get_precision_metric(), test_case
+            )
+        else:
+            precision_score = 0.0  # Not evaluated in online mode
 
         passed = faithfulness_score >= self.FAITHFULNESS_THRESHOLD
         failures: list[str] = []
@@ -221,19 +214,20 @@ class ComplianceAuditorAgent:
         response: str,
         context_chunks: list[str],
         session_id: Optional[str] = None,
+        expected_output: Optional[str] = None,
         persist_result: bool = True,
     ) -> EvaluationResult:
         """
         Run RAG Triad evaluation on a single query/response pair.
 
         Args:
-            query         : The user's legal question
-            response      : LegalMind's generated answer
-            context_chunks: Raw text of the retrieved chunks used
-            session_id    : For logging
-
-        Returns:
-            EvaluationResult with all three metric scores
+            query          : The user's legal question
+            response       : LegalMind's generated answer
+            context_chunks : Raw text of the retrieved chunks used
+            session_id     : For logging
+            expected_output: Ground-truth answer (from golden dataset).
+                             Required for ContextualPrecision. Pass None
+                             for online/observer mode.
         """
         log = logger.bind(session_id=session_id, query_preview=query[:60])
         log.info("Compliance audit started")
@@ -243,6 +237,7 @@ class ComplianceAuditorAgent:
                 question=query,
                 answer=response,
                 context=context_chunks,
+                expected_output=expected_output,
             )
 
             result = EvaluationResult(
@@ -250,9 +245,7 @@ class ComplianceAuditorAgent:
                 answer_relevance=single.answer_relevance,
                 context_precision=single.context_precision,
                 passed=single.passed,
-                details={
-                    "failure_reasons": single.failure_reasons,
-                },
+                details={"failure_reasons": single.failure_reasons},
             )
 
             if result.passed:
@@ -290,7 +283,7 @@ class ComplianceAuditorAgent:
     ) -> BatchEvaluationResult:
         """
         Run a batch evaluation over active golden dataset entries.
-        This is used by /evaluate/run and CI/CD guardrails.
+        Used by /evaluate/run and CI/CD guardrails.
         """
         size = dataset_size or settings.golden_dataset_size
         log = logger.bind(run_id=run_id, dataset_size=size)
@@ -329,6 +322,7 @@ class ComplianceAuditorAgent:
                     response=query_response.answer,
                     context_chunks=[src.text for src in query_response.sources],
                     session_id=f"{run_id}:{idx}",
+                    expected_output=entry.expected_answer,  # ← fixes ContextualPrecision
                     persist_result=False,
                 )
             except Exception as exc:
@@ -348,6 +342,14 @@ class ComplianceAuditorAgent:
                 passed_cases += 1
             else:
                 failed_cases += 1
+
+            log.info(
+                "Case evaluated",
+                case=idx,
+                total=len(entries),
+                faithfulness=eval_result.faithfulness,
+                passed=eval_result.passed,
+            )
 
         total = len(entries)
         avg_f = sum(scores_f) / total
@@ -378,13 +380,12 @@ class ComplianceAuditorAgent:
 
 
 # ──────────────────────────────────────────────────────────────────
-# Persist evaluation result
+# DB helpers
 # ──────────────────────────────────────────────────────────────────
 async def _save_single_eval_result(
     result: EvaluationResult,
     session_id: Optional[str],
 ) -> None:
-    """Store evaluation scores in eval_runs table (non-fatal)."""
     try:
         import uuid
         from core.db import get_db_context
@@ -408,7 +409,6 @@ async def _save_single_eval_result(
 
 
 async def _load_golden_dataset_entries(limit: int):
-    """Load active golden dataset rows for batch evaluation."""
     try:
         from sqlalchemy import select
         from core.db import get_db_context
@@ -428,7 +428,6 @@ async def _load_golden_dataset_entries(limit: int):
 
 
 async def _save_batch_eval_result(result: BatchEvaluationResult) -> None:
-    """Persist one batch evaluation aggregate row to eval_runs."""
     try:
         from core.db import get_db_context
         from core.models.db_models import EvalRun
@@ -443,9 +442,7 @@ async def _save_batch_eval_result(result: BatchEvaluationResult) -> None:
                 passed_cases=result.passed_cases,
                 failed_cases=result.failed_cases,
                 passed=result.passed,
-                metadata={
-                    "mode": "batch",
-                },
+                metadata={"mode": "batch"},
             )
             db.add(run)
     except Exception as exc:
