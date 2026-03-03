@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     golden_dataset_size: int = Field(default=50, gt=0)
     adversarial_batch_size: int = Field(default=6, gt=0)
     adversarial_max_chunks_per_batch: int = Field(default=5, gt=0)
-    adversarial_max_output_tokens: int = Field(default=1536, gt=0)
+    adversarial_max_output_tokens: int = Field(default=5000, gt=0)
 
     # ------------------------------------------------------------------
     # API pagination
